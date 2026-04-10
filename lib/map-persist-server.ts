@@ -34,15 +34,25 @@ export async function persistMapUpdate(
       JSON.stringify(payload.editor_meta),
     ) as unknown;
   }
+  if (Object.keys(row).length === 0) {
+    return { error: "Nothing to save (empty payload)." };
+  }
+
   const { data: updated, error } = await supabase
     .from("maps")
     .update(row)
     .eq("id", id)
     .select("id")
     .maybeSingle();
-  if (error) return { error: error.message };
+  if (error) {
+    const bits = [error.message, error.details, error.hint].filter(Boolean);
+    return { error: bits.join(" — ") };
+  }
   if (!updated) {
-    return { error: "Map was not updated (check id and permissions)." };
+    return {
+      error:
+        "No row was updated for this map id. If the map loads but save always fails, confirm Vercel env SUPABASE_SERVICE_ROLE_KEY is the service_role JWT (not the anon key) and that migrations adding extra_paths / editor_meta have been applied.",
+    };
   }
   revalidatePath("/coach");
   revalidatePath("/coach/maps");

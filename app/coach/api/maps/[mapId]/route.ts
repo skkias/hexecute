@@ -32,9 +32,14 @@ export async function POST(
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
 
-  const result = await persistMapUpdate(mapId, payload);
-  if (result.error) {
-    return NextResponse.json({ error: result.error }, { status: 400 });
+  try {
+    const result = await persistMapUpdate(mapId, payload);
+    if (result.error) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    return NextResponse.json({});
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Save failed.";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
-  return NextResponse.json({});
 }
