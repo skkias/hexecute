@@ -6,6 +6,7 @@ import { COACH_ACCESS_COOKIE, computeCoachAccessToken } from "@/lib/coach-token"
 import { verifyDocsPassword } from "@/lib/docs-token";
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+/** Covers `/coach/*` including `/coach/api/*` (map save). */
 const COOKIE_PATH = "/coach";
 
 export async function unlockCoachForm(

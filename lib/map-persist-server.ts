@@ -1,0 +1,52 @@
+import "server-only";
+
+import { revalidatePath } from "next/cache";
+import { createServiceSupabaseClient } from "@/lib/supabase-service";
+import type { MapUpdatePayload } from "@/types/catalog";
+
+/**
+ * Writes coach map editor fields to Supabase. Used by the REST route (primary)
+ * and optionally by the server action wrapper.
+ */
+export async function persistMapUpdate(
+  id: string,
+  payload: MapUpdatePayload,
+): Promise<{ error?: string }> {
+  const supabase = createServiceSupabaseClient();
+  const row: Record<string, unknown> = {};
+  if (payload.name !== undefined) row.name = payload.name;
+  if (payload.reference_image_url !== undefined) {
+    row.reference_image_url = payload.reference_image_url;
+  }
+  if (payload.image_transform !== undefined) {
+    row.image_transform = payload.image_transform;
+  }
+  if (payload.view_box !== undefined) row.view_box = payload.view_box;
+  if (payload.path_atk !== undefined) row.path_atk = payload.path_atk;
+  if (payload.path_def !== undefined) row.path_def = payload.path_def;
+  if (payload.extra_paths !== undefined) {
+    row.extra_paths = JSON.parse(
+      JSON.stringify(payload.extra_paths),
+    ) as unknown;
+  }
+  if (payload.editor_meta !== undefined) {
+    row.editor_meta = JSON.parse(
+      JSON.stringify(payload.editor_meta),
+    ) as unknown;
+  }
+  const { data: updated, error } = await supabase
+    .from("maps")
+    .update(row)
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!updated) {
+    return { error: "Map was not updated (check id and permissions)." };
+  }
+  revalidatePath("/coach");
+  revalidatePath("/coach/maps");
+  revalidatePath(`/coach/maps/${id}`);
+  revalidatePath("/");
+  return {};
+}

@@ -90,3 +90,15 @@ export interface MapEditorMeta {
   spawn_markers: MapSpawnMarker[];
   location_labels: MapLocationLabel[];
 }
+
+/** Coach map editor → `public.maps` update (partial row). */
+export type MapUpdatePayload = {
+  name?: string;
+  reference_image_url?: string | null;
+  image_transform?: MapImageTransform;
+  view_box?: string;
+  path_atk?: string | null;
+  path_def?: string | null;
+  extra_paths?: MapOverlayShape[];
+  editor_meta?: MapEditorMeta;
+};

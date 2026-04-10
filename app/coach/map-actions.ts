@@ -2,12 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { assertCoachGate } from "@/lib/coach-gate-server";
+import { persistMapUpdate } from "@/lib/map-persist-server";
 import { createServiceSupabaseClient } from "@/lib/supabase-service";
-import type {
-  MapEditorMeta,
-  MapImageTransform,
-  MapOverlayShape,
-} from "@/types/catalog";
+import type { MapUpdatePayload } from "@/types/catalog";
 
 function slugify(raw: string): string {
   return raw
@@ -46,21 +43,10 @@ export async function createMapAction(input: {
   }
 }
 
-export type MapUpdatePayload = {
-  name?: string;
-  reference_image_url?: string | null;
-  image_transform?: MapImageTransform;
-  view_box?: string;
-  path_atk?: string | null;
-  path_def?: string | null;
-  extra_paths?: MapOverlayShape[];
-  editor_meta?: MapEditorMeta;
-};
+export type { MapUpdatePayload } from "@/types/catalog";
 
 /**
- * Pass `payloadJson` = `JSON.stringify({ ...MapUpdatePayload })` from the client.
- * Nested arrays (`extra_paths`, `editor_meta`) are unreliable as structured args
- * through Server Actions; a single JSON string preserves the full payload.
+ * Legacy wrapper (e.g. reference image upload). Map editor uses POST `/coach/api/maps/[mapId]`.
  */
 export async function updateMapAction(
   id: string,
@@ -77,40 +63,7 @@ export async function updateMapAction(
     if (!payload || typeof payload !== "object") {
       return { error: "Invalid map save data." };
     }
-    const supabase = createServiceSupabaseClient();
-    const row: Record<string, unknown> = {};
-    if (payload.name !== undefined) row.name = payload.name;
-    if (payload.reference_image_url !== undefined)
-      row.reference_image_url = payload.reference_image_url;
-    if (payload.image_transform !== undefined)
-      row.image_transform = payload.image_transform;
-    if (payload.view_box !== undefined) row.view_box = payload.view_box;
-    if (payload.path_atk !== undefined) row.path_atk = payload.path_atk;
-    if (payload.path_def !== undefined) row.path_def = payload.path_def;
-    if (payload.extra_paths !== undefined) {
-      // Plain JSON only (jsonb); avoids non-serializable values from client state.
-      row.extra_paths = JSON.parse(
-        JSON.stringify(payload.extra_paths),
-      ) as unknown;
-    }
-    if (payload.editor_meta !== undefined) {
-      row.editor_meta = JSON.parse(
-        JSON.stringify(payload.editor_meta),
-      ) as unknown;
-    }
-    const { data: updated, error } = await supabase
-      .from("maps")
-      .update(row)
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
-    if (error) return { error: error.message };
-    if (!updated) return { error: "Map was not updated (check id and permissions)." };
-    revalidatePath("/coach");
-    revalidatePath("/coach/maps");
-    revalidatePath(`/coach/maps/${id}`);
-    revalidatePath("/");
-    return {};
+    return await persistMapUpdate(id, payload);
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Failed to update map." };
   }

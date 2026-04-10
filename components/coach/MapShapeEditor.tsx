@@ -38,10 +38,7 @@ import {
   closestEdgeWithinDistance,
   insertPointOnEdge,
 } from "@/lib/point-segment";
-import {
-  updateMapAction,
-  uploadMapReferenceImageAction,
-} from "@/app/coach/map-actions";
+import { uploadMapReferenceImageAction } from "@/app/coach/map-actions";
 import {
   ArrowLeftRight,
   ArrowUpFromLine,
@@ -1490,21 +1487,36 @@ export function MapShapeEditor({
             return { ...s, points: clamped };
           })
         : overlays;
-    const res = await updateMapAction(
-      mapId,
-      JSON.stringify({
-        reference_image_url: refUrl,
-        image_transform: transform,
-        view_box: viewBox,
-        path_atk: pathAtk,
-        path_def: pathDef,
-        extra_paths: sanitizedOverlays,
-        editor_meta: editorMeta,
-      }),
-    );
-    setSaving(false);
-    if (res.error) setBanner(res.error);
-    else setBanner("Map shape saved.");
+    const payload = {
+      reference_image_url: refUrl,
+      image_transform: transform,
+      view_box: viewBox,
+      path_atk: pathAtk,
+      path_def: pathDef,
+      extra_paths: sanitizedOverlays,
+      editor_meta: editorMeta,
+    };
+    try {
+      const res = await fetch(
+        `/coach/api/maps/${encodeURIComponent(mapId)}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok || json.error) {
+        setBanner(json.error ?? `Save failed (HTTP ${res.status}).`);
+      } else {
+        setBanner("Map shape saved.");
+      }
+    } catch {
+      setBanner("Save failed (network error).");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
