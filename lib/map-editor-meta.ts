@@ -1,8 +1,28 @@
 import type {
   MapEditorMeta,
   MapLocationLabel,
+  MapLocationLabelStyle,
   MapSpawnMarker,
 } from "@/types/catalog";
+
+const DEFAULT_LABEL_STYLE: MapLocationLabelStyle = "pin";
+const DEFAULT_LABEL_COLOR = "#e9d5ff";
+const DEFAULT_LABEL_SIZE = 1;
+
+function clampLabelSize(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_LABEL_SIZE;
+  return Math.min(3, Math.max(0.35, n));
+}
+
+function normalizeLabelColor(raw: unknown): string {
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return DEFAULT_LABEL_COLOR;
+}
+
+function normalizeLabelStyle(raw: unknown): MapLocationLabelStyle {
+  return raw === "text" ? "text" : "pin";
+}
 
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -52,7 +72,15 @@ export function normalizeEditorMeta(raw: unknown): MapEditorMeta {
       const lx = m.x;
       const ly = m.y;
       if (typeof lx === "number" && typeof ly === "number") {
-        labels.push({ id, x: lx, y: ly, text });
+        labels.push({
+          id,
+          x: lx,
+          y: ly,
+          text,
+          style: normalizeLabelStyle(m.style),
+          color: normalizeLabelColor(m.color),
+          size: clampLabelSize(m.size),
+        });
       }
     }
   }

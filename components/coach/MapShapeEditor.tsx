@@ -14,6 +14,7 @@ import type {
   GameMap,
   MapEditorMeta,
   MapImageTransform,
+  MapLocationLabelStyle,
   MapOverlayKind,
   MapOverlayShape,
 } from "@/types/catalog";
@@ -332,6 +333,19 @@ function newShapeId(): string {
   return `sh-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** `#rrggbb` for `<input type="color">` when possible. */
+function colorInputHex(css: string): string {
+  const s = css.trim();
+  if (/^#[\dA-Fa-f]{6}$/.test(s)) return s;
+  if (/^#[\dA-Fa-f]{3}$/.test(s)) {
+    const r = s[1]!;
+    const g = s[2]!;
+    const b = s[3]!;
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return "#e9d5ff";
+}
+
 function clientToSvg(
   svg: SVGSVGElement,
   clientX: number,
@@ -437,6 +451,12 @@ export function MapShapeEditor({
   );
   /** Click map to place spawns/labels; not persisted. */
   const [placeMode, setPlaceMode] = useState<PlaceAnnotationMode>("none");
+  /** Style/color/size for the next label placed on the map (each label stores its own). */
+  const [labelPlaceDefaults, setLabelPlaceDefaults] = useState<{
+    style: MapLocationLabelStyle;
+    color: string;
+    size: number;
+  }>({ style: "pin", color: "#e9d5ff", size: 1 });
   const annotationDragRef = useRef<AnnotationDragState | null>(null);
 
   const clipId = useId().replace(/:/g, "");
@@ -1008,11 +1028,20 @@ export function MapShapeEditor({
           return;
         }
         if (placeMode === "label") {
+          const d = labelPlaceDefaults;
           setEditorMeta((m) => ({
             ...m,
             location_labels: [
               ...m.location_labels,
-              { id: newShapeId(), x: p.x, y: p.y, text: "Label" },
+              {
+                id: newShapeId(),
+                x: p.x,
+                y: p.y,
+                text: "Label",
+                style: d.style,
+                color: d.color,
+                size: d.size,
+              },
             ],
           }));
           setBanner(null);
@@ -1031,7 +1060,7 @@ export function MapShapeEditor({
       const p = clientToSvg(svg, e.clientX, e.clientY);
       addPoint(p);
     },
-    [tool, addPoint, viewport, tryInsertPointOnEdge, placeMode],
+    [tool, addPoint, viewport, tryInsertPointOnEdge, placeMode, labelPlaceDefaults],
   );
 
   const onSvgPointerMove = useCallback(
@@ -1650,7 +1679,7 @@ export function MapShapeEditor({
               {placeMode === "spawn-def" &&
                 "Click the map to place a defender spawn marker. Drag to move; right-click to remove."}
               {placeMode === "label" &&
-                "Click the map to add a location label. Edit text in the sidebar; drag the dot to move; right-click to remove."}
+                "Click the map to add a label (uses style/size/color below). Pin: drag the dot; text-only: drag the text. Right-click to remove."}
             </p>
           )}
 
@@ -1973,45 +2002,85 @@ export function MapShapeEditor({
                     />
                   );
                 })}
-                {editorMeta.location_labels.map((l) => (
-                  <g key={`label-${l.id}`}>
-                    <circle
-                      data-map-ann="label"
-                      cx={l.x}
-                      cy={l.y}
-                      r={annMarkerR * 0.55}
-                      fill="rgba(250,250,250,0.96)"
-                      stroke="rgb(167,139,250)"
-                      strokeWidth={vertexStrokeW * 0.75}
-                      style={{ cursor: "grab" }}
-                      onPointerDown={(e) =>
-                        onLabelMarkerPointerDown(e, l.id, { x: l.x, y: l.y })
-                      }
-                      onPointerMove={onAnnotationPointerMove}
-                      onPointerUp={onAnnotationPointerUp}
-                      onPointerCancel={onAnnotationPointerUp}
-                      onLostPointerCapture={() => {
-                        annotationDragRef.current = null;
-                      }}
-                    />
-                    <text
-                      x={l.x + annMarkerR * 1.2}
-                      y={l.y + labelFontSize * 0.35}
-                      fill="rgb(250,250,250)"
-                      stroke="rgb(15,15,20)"
-                      strokeWidth={labelFontSize * 0.07}
-                      paintOrder="stroke fill"
-                      style={{
-                        fontSize: labelFontSize,
-                        fontFamily: "system-ui, sans-serif",
-                        fontWeight: 600,
-                        pointerEvents: "none",
-                      }}
-                    >
-                      {l.text}
-                    </text>
-                  </g>
-                ))}
+                {editorMeta.location_labels.map((l) => {
+                  const fs = labelFontSize * l.size;
+                  const pinR = annMarkerR * l.size * 0.55;
+                  const strokeOut = fs * 0.08;
+                  const fill = l.color;
+                  if (l.style === "text") {
+                    return (
+                      <text
+                        key={`label-${l.id}`}
+                        data-map-ann="label"
+                        x={l.x}
+                        y={l.y}
+                        dominantBaseline="middle"
+                        fill={fill}
+                        stroke="rgba(12,12,18,0.88)"
+                        strokeWidth={strokeOut}
+                        paintOrder="stroke fill"
+                        style={{
+                          fontSize: fs,
+                          fontFamily: "system-ui, sans-serif",
+                          fontWeight: 600,
+                          cursor: "grab",
+                        }}
+                        onPointerDown={(e) =>
+                          onLabelMarkerPointerDown(e, l.id, { x: l.x, y: l.y })
+                        }
+                        onPointerMove={onAnnotationPointerMove}
+                        onPointerUp={onAnnotationPointerUp}
+                        onPointerCancel={onAnnotationPointerUp}
+                        onLostPointerCapture={() => {
+                          annotationDragRef.current = null;
+                        }}
+                      >
+                        {l.text}
+                      </text>
+                    );
+                  }
+                  return (
+                    <g key={`label-${l.id}`}>
+                      <circle
+                        data-map-ann="label"
+                        cx={l.x}
+                        cy={l.y}
+                        r={pinR}
+                        fill={fill}
+                        fillOpacity={0.95}
+                        stroke="rgba(255,255,255,0.92)"
+                        strokeWidth={vertexStrokeW * 0.75 * l.size}
+                        style={{ cursor: "grab" }}
+                        onPointerDown={(e) =>
+                          onLabelMarkerPointerDown(e, l.id, { x: l.x, y: l.y })
+                        }
+                        onPointerMove={onAnnotationPointerMove}
+                        onPointerUp={onAnnotationPointerUp}
+                        onPointerCancel={onAnnotationPointerUp}
+                        onLostPointerCapture={() => {
+                          annotationDragRef.current = null;
+                        }}
+                      />
+                      <text
+                        x={l.x + pinR * 1.25}
+                        y={l.y}
+                        dominantBaseline="middle"
+                        fill={fill}
+                        stroke="rgba(12,12,18,0.88)"
+                        strokeWidth={strokeOut}
+                        paintOrder="stroke fill"
+                        style={{
+                          fontSize: fs,
+                          fontFamily: "system-ui, sans-serif",
+                          fontWeight: 600,
+                          pointerEvents: "none",
+                        }}
+                      >
+                        {l.text}
+                      </text>
+                    </g>
+                  );
+                })}
               </g>
             </svg>
           </div>
@@ -2089,6 +2158,84 @@ export function MapShapeEditor({
               />
               Show reference image
             </label>
+            <span className="mt-3 block text-xs font-medium text-violet-200/80">
+              Next label (when placing)
+            </span>
+            <div className="mt-2 space-y-2 rounded border border-fuchsia-900/30 bg-slate-950/35 p-2">
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLabelPlaceDefaults((d) => ({ ...d, style: "pin" }))
+                  }
+                  className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                    labelPlaceDefaults.style === "pin"
+                      ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                      : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                  }`}
+                >
+                  Pin + text
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLabelPlaceDefaults((d) => ({ ...d, style: "text" }))
+                  }
+                  className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                    labelPlaceDefaults.style === "text"
+                      ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                      : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                  }`}
+                >
+                  Text only
+                </button>
+              </div>
+              <div>
+                <label className="text-xs text-violet-300/60">
+                  Size ({labelPlaceDefaults.size.toFixed(2)}×)
+                </label>
+                <input
+                  type="range"
+                  min={0.35}
+                  max={3}
+                  step={0.05}
+                  value={labelPlaceDefaults.size}
+                  onChange={(e) =>
+                    setLabelPlaceDefaults((d) => ({
+                      ...d,
+                      size: Number(e.target.value),
+                    }))
+                  }
+                  className="mt-1 w-full accent-fuchsia-500"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="color"
+                  aria-label="Label color"
+                  value={colorInputHex(labelPlaceDefaults.color)}
+                  onChange={(e) =>
+                    setLabelPlaceDefaults((d) => ({
+                      ...d,
+                      color: e.target.value,
+                    }))
+                  }
+                  className="h-8 w-10 shrink-0 cursor-pointer rounded border border-violet-700/50 bg-transparent p-0"
+                />
+                <input
+                  type="text"
+                  value={labelPlaceDefaults.color}
+                  onChange={(e) =>
+                    setLabelPlaceDefaults((d) => ({
+                      ...d,
+                      color: e.target.value,
+                    }))
+                  }
+                  className="input-field min-w-0 flex-1 py-1 font-mono text-xs"
+                  placeholder="#e9d5ff"
+                />
+              </div>
+            </div>
             <span className="mt-3 block text-xs font-medium text-violet-200/80">
               Place on map
             </span>
@@ -2189,7 +2336,7 @@ export function MapShapeEditor({
                 {editorMeta.location_labels.map((l) => (
                   <div
                     key={l.id}
-                    className="flex flex-col gap-1 rounded border border-fuchsia-900/35 bg-slate-950/40 p-2"
+                    className="flex flex-col gap-2 rounded border border-fuchsia-900/35 bg-slate-950/40 p-2"
                   >
                     <div className="flex items-center gap-1">
                       <MapPin className="h-3.5 w-3.5 shrink-0 text-fuchsia-300/90" />
@@ -2224,6 +2371,100 @@ export function MapShapeEditor({
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditorMeta((m) => ({
+                            ...m,
+                            location_labels: m.location_labels.map((x) =>
+                              x.id === l.id ? { ...x, style: "pin" } : x,
+                            ),
+                          }))
+                        }
+                        className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                          l.style === "pin"
+                            ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                            : "border-violet-800/45 text-violet-200/75"
+                        }`}
+                      >
+                        Pin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditorMeta((m) => ({
+                            ...m,
+                            location_labels: m.location_labels.map((x) =>
+                              x.id === l.id ? { ...x, style: "text" } : x,
+                            ),
+                          }))
+                        }
+                        className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                          l.style === "text"
+                            ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                            : "border-violet-800/45 text-violet-200/75"
+                        }`}
+                      >
+                        Text
+                      </button>
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-violet-300/60">
+                        Size ({l.size.toFixed(2)}×)
+                      </label>
+                      <input
+                        type="range"
+                        min={0.35}
+                        max={3}
+                        step={0.05}
+                        value={l.size}
+                        onChange={(e) =>
+                          setEditorMeta((m) => ({
+                            ...m,
+                            location_labels: m.location_labels.map((x) =>
+                              x.id === l.id
+                                ? { ...x, size: Number(e.target.value) }
+                                : x,
+                            ),
+                          }))
+                        }
+                        className="mt-0.5 w-full accent-fuchsia-500"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="color"
+                        aria-label="Label color"
+                        value={colorInputHex(l.color)}
+                        onChange={(e) =>
+                          setEditorMeta((m) => ({
+                            ...m,
+                            location_labels: m.location_labels.map((x) =>
+                              x.id === l.id
+                                ? { ...x, color: e.target.value }
+                                : x,
+                            ),
+                          }))
+                        }
+                        className="h-7 w-9 shrink-0 cursor-pointer rounded border border-violet-700/50 bg-transparent p-0"
+                      />
+                      <input
+                        type="text"
+                        value={l.color}
+                        onChange={(e) =>
+                          setEditorMeta((m) => ({
+                            ...m,
+                            location_labels: m.location_labels.map((x) =>
+                              x.id === l.id
+                                ? { ...x, color: e.target.value }
+                                : x,
+                            ),
+                          }))
+                        }
+                        className="input-field min-w-0 flex-1 py-1 font-mono text-[11px]"
+                      />
                     </div>
                   </div>
                 ))}

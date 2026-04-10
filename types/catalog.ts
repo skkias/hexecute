@@ -70,11 +70,19 @@ export interface MapSpawnMarker {
   y: number;
 }
 
+/** `pin` = anchor dot + text; `text` = text only (position is text anchor). */
+export type MapLocationLabelStyle = "pin" | "text";
+
 export interface MapLocationLabel {
   id: string;
   x: number;
   y: number;
   text: string;
+  style: MapLocationLabelStyle;
+  /** Text and pin accent (CSS color string, e.g. hex). */
+  color: string;
+  /** Size multiplier relative to the map’s default label scale (≈0.35–3). */
+  size: number;
 }
 
 export interface MapEditorMeta {
