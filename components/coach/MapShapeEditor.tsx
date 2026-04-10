@@ -40,10 +40,12 @@ import {
 } from "@/lib/point-segment";
 import { uploadMapReferenceImageAction } from "@/app/coach/map-actions";
 import {
+  AlertCircle,
   ArrowLeftRight,
   ArrowUpFromLine,
   BoxSelect,
   BrickWall,
+  CheckCircle2,
   ChevronRight,
   CircleSlash2,
   Eye,
@@ -433,6 +435,11 @@ export function MapShapeEditor({
   const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
+  /** Transient save feedback (toast); other messages still use `banner`. */
+  const [saveToast, setSaveToast] = useState<{
+    msg: string;
+    kind: "ok" | "err";
+  } | null>(null);
   /** null = show full canvas; otherwise zoom/pan window (editor-only, not saved). */
   const [viewport, setViewport] = useState<ViewRect | null>(null);
   const [rightPanning, setRightPanning] = useState(false);
@@ -440,6 +447,10 @@ export function MapShapeEditor({
   /** Sidebar list row hover → highlight matching overlay on the canvas */
   const [sidebarHoverOverlayId, setSidebarHoverOverlayId] = useState<
     string | null
+  >(null);
+  /** Sidebar hole row hover → highlight that hole ring on the canvas */
+  const [sidebarHoverHoleIndex, setSidebarHoverHoleIndex] = useState<
+    number | null
   >(null);
   /** Cyan defense outline is mirrored from attack; can hide for a cleaner view. */
   const [showDefensePreview, setShowDefensePreview] = useState(true);
@@ -634,6 +645,12 @@ export function MapShapeEditor({
   useEffect(() => {
     setViewport(null);
   }, [viewBox]);
+
+  useEffect(() => {
+    if (!saveToast) return;
+    const id = window.setTimeout(() => setSaveToast(null), 4200);
+    return () => clearTimeout(id);
+  }, [saveToast]);
 
   useEffect(() => {
     const onDocumentContextMenu = (e: MouseEvent) => {
@@ -1508,12 +1525,15 @@ export function MapShapeEditor({
       );
       const json = (await res.json()) as { error?: string };
       if (!res.ok || json.error) {
-        setBanner(json.error ?? `Save failed (HTTP ${res.status}).`);
+        setSaveToast({
+          msg: json.error ?? `Save failed (HTTP ${res.status}).`,
+          kind: "err",
+        });
       } else {
-        setBanner("Map shape saved.");
+        setSaveToast({ msg: "Map shape saved.", kind: "ok" });
       }
     } catch {
-      setBanner("Save failed (network error).");
+      setSaveToast({ msg: "Save failed (network error).", kind: "err" });
     } finally {
       setSaving(false);
     }
@@ -1542,6 +1562,18 @@ export function MapShapeEditor({
         selection.shapeId === activeLayer.id));
 
   const activeCount = getActivePoints().length;
+
+  const mapPanelVars = useMemo(
+    () =>
+      ({
+        "--map-vp-min-w": `${MAP_VIEWPORT_MIN_W_PX}px`,
+        "--map-vp-min-h": `${MAP_VIEWPORT_MIN_H_PX}px`,
+        "--map-vp-max-w": `${MAP_VIEWPORT_MAX_W_PX}px`,
+        "--map-vp-max-h": `${MAP_VIEWPORT_MAX_H_PX}px`,
+        "--map-vp-max-dvh": `${MAP_VIEWPORT_MAX_DVH}dvh`,
+      }) as CSSProperties,
+    [],
+  );
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
@@ -1589,100 +1621,101 @@ export function MapShapeEditor({
 
       <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,min(50dvh,32rem))] gap-6 overflow-hidden lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-1 lg:items-stretch">
         <div className="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <label className="btn-secondary inline-flex cursor-pointer items-center gap-2 text-sm">
-              <ImagePlus className="h-4 w-4" />
-              Upload image
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => void onFile(e)}
-              />
-            </label>
-            <span className="text-xs text-violet-300/45">
-              Or paste (Ctrl+V) anywhere on this page
-            </span>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap items-center gap-3 text-xs text-violet-300/55">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded border border-violet-800/40 px-2 py-0.5">
-                <Swords className="h-3.5 w-3.5 text-violet-300" />
-                Attack (editable)
-              </span>
-              <span className="inline-flex items-center gap-1 rounded border border-sky-800/40 px-2 py-0.5">
-                <Shield className="h-3.5 w-3.5 text-sky-300" />
-                Defense (auto mirror)
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowDefensePreview((v) => !v)}
-                className="btn-secondary inline-flex items-center gap-1 px-2 py-1"
-                title={
-                  showDefensePreview
-                    ? "Hide cyan defense preview"
-                    : "Show cyan defense preview"
-                }
-              >
-                {showDefensePreview ? (
-                  <Eye className="h-3.5 w-3.5" />
-                ) : (
-                  <EyeOff className="h-3.5 w-3.5" />
+          <div
+            className="mx-auto flex w-full min-w-0 max-w-[min(100%,var(--map-vp-max-w))] flex-col gap-3"
+            style={mapPanelVars}
+          >
+            <div className="min-w-0 shrink-0 overflow-x-auto rounded-lg border border-violet-500/20 bg-slate-950/60 px-2 py-2 shadow-sm">
+              <div className="flex w-max min-w-full flex-nowrap items-center gap-x-3 gap-y-1 text-xs text-violet-300/55">
+                <label className="btn-secondary inline-flex shrink-0 cursor-pointer items-center gap-2 text-sm">
+                  <ImagePlus className="h-4 w-4" />
+                  Upload image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => void onFile(e)}
+                  />
+                </label>
+                <span className="shrink-0 text-xs text-violet-300/45">
+                  Or paste (Ctrl+V) anywhere on this page
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded border border-violet-800/40 px-2 py-0.5">
+                  <Swords className="h-3.5 w-3.5 text-violet-300" />
+                  Attack (editable)
+                </span>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded border border-sky-800/40 px-2 py-0.5">
+                  <Shield className="h-3.5 w-3.5 text-sky-300" />
+                  Defense (auto mirror)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowDefensePreview((v) => !v)}
+                  className="btn-secondary inline-flex shrink-0 items-center gap-1 px-2 py-1"
+                  title={
+                    showDefensePreview
+                      ? "Hide cyan defense preview"
+                      : "Show cyan defense preview"
+                  }
+                >
+                  {showDefensePreview ? (
+                    <Eye className="h-3.5 w-3.5" />
+                  ) : (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  )}
+                  Defense preview
+                </button>
+                <button
+                  type="button"
+                  onClick={swapAttackDefenseSides}
+                  disabled={outlineOuter.length < 1}
+                  className="btn-secondary inline-flex shrink-0 items-center gap-1 px-2 py-1 disabled:opacity-40"
+                  title="Flip stored attack outline and overlays to the opposite half of the map (use if attack/defense look inverted)"
+                >
+                  <FlipVertical2 className="h-3.5 w-3.5" />
+                  Swap sides
+                </button>
+                <span className="shrink-0 whitespace-nowrap text-violet-300/40">
+                  Scroll to zoom. Right-drag to pan when zoomed. Drag the map
+                  panel corner to resize — grows with the layout, with caps on
+                  huge displays.
+                </span>
+                {viewport && (
+                  <button
+                    type="button"
+                    onClick={() => setViewport(null)}
+                    className="shrink-0 rounded border border-violet-700/50 px-2 py-0.5 text-violet-200/80 hover:bg-violet-950/50 hover:text-white"
+                  >
+                    Reset zoom
+                  </button>
                 )}
-                Defense preview
-              </button>
-              <button
-                type="button"
-                onClick={swapAttackDefenseSides}
-                disabled={outlineOuter.length < 1}
-                className="btn-secondary inline-flex items-center gap-1 px-2 py-1 disabled:opacity-40"
-                title="Flip stored attack outline and overlays to the opposite half of the map (use if attack/defense look inverted)"
-              >
-                <FlipVertical2 className="h-3.5 w-3.5" />
-                Swap sides
-              </button>
+                <button
+                  type="button"
+                  disabled={!refUrl}
+                  onClick={() =>
+                    setEditorMeta((m) => ({
+                      ...m,
+                      show_reference_image: !m.show_reference_image,
+                    }))
+                  }
+                  className="btn-secondary inline-flex shrink-0 items-center gap-1 px-2 py-1 disabled:opacity-40"
+                  title={
+                    !refUrl
+                      ? "Upload a reference image first"
+                      : editorMeta.show_reference_image
+                        ? "Hide reference image (vectors stay visible)"
+                        : "Show reference image"
+                  }
+                >
+                  {editorMeta.show_reference_image ? (
+                    <Eye className="h-3.5 w-3.5" />
+                  ) : (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  )}
+                  Reference art
+                </button>
+              </div>
             </div>
-            <span className="text-violet-300/40">
-              Scroll to zoom. Right-drag to pan when zoomed. Drag the map panel
-              corner to resize — grows with the layout, with caps on huge
-              displays.
-            </span>
-            {viewport && (
-              <button
-                type="button"
-                onClick={() => setViewport(null)}
-                className="rounded border border-violet-700/50 px-2 py-0.5 text-violet-200/80 hover:bg-violet-950/50 hover:text-white"
-              >
-                Reset zoom
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={!refUrl}
-              onClick={() =>
-                setEditorMeta((m) => ({
-                  ...m,
-                  show_reference_image: !m.show_reference_image,
-                }))
-              }
-              className="btn-secondary inline-flex items-center gap-1 px-2 py-1 disabled:opacity-40"
-              title={
-                !refUrl
-                  ? "Upload a reference image first"
-                  : editorMeta.show_reference_image
-                    ? "Hide reference image (vectors stay visible)"
-                    : "Show reference image"
-              }
-            >
-              {editorMeta.show_reference_image ? (
-                <Eye className="h-3.5 w-3.5" />
-              ) : (
-                <EyeOff className="h-3.5 w-3.5" />
-              )}
-              Reference art
-            </button>
-          </div>
 
           {placeMode !== "none" && (
             <p
@@ -1699,17 +1732,8 @@ export function MapShapeEditor({
           )}
 
           <div
-            className="box-border mx-auto flex w-full max-w-[min(100%,var(--map-vp-max-w))] flex-1 overflow-auto rounded-xl border border-violet-500/25 bg-black/40 min-h-[var(--map-vp-min-h)] min-w-[var(--map-vp-min-w)] max-h-[min(100%,min(var(--map-vp-max-dvh),var(--map-vp-max-h)))]"
-            style={
-              {
-                resize: "both",
-                "--map-vp-min-w": `${MAP_VIEWPORT_MIN_W_PX}px`,
-                "--map-vp-min-h": `${MAP_VIEWPORT_MIN_H_PX}px`,
-                "--map-vp-max-w": `${MAP_VIEWPORT_MAX_W_PX}px`,
-                "--map-vp-max-h": `${MAP_VIEWPORT_MAX_H_PX}px`,
-                "--map-vp-max-dvh": `${MAP_VIEWPORT_MAX_DVH}dvh`,
-              } as CSSProperties
-            }
+            className="box-border w-full flex-1 overflow-auto rounded-xl border border-violet-500/25 bg-black/40 min-h-[var(--map-vp-min-h)] min-w-[var(--map-vp-min-w)] max-h-[min(100%,min(var(--map-vp-max-dvh),var(--map-vp-max-h)))]"
+            style={{ ...mapPanelVars, resize: "both" }}
             onKeyDown={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
           >
@@ -1764,6 +1788,26 @@ export function MapShapeEditor({
                   pointerEvents="none"
                 />
               )}
+              {showDefensePreview &&
+                sidebarHoverHoleIndex !== null &&
+                (() => {
+                  const h = defHoles[sidebarHoverHoleIndex];
+                  if (!h || h.length < 3) return null;
+                  const d = previewOpenOrClosed(h);
+                  if (!d) return null;
+                  return (
+                    <path
+                      key={`hole-hover-def-${sidebarHoverHoleIndex}`}
+                      d={d}
+                      fill="rgba(125,211,252,0.2)"
+                      fillRule={h.length >= 3 ? "evenodd" : undefined}
+                      stroke="rgb(224,242,254)"
+                      strokeWidth={vb.width * 0.0042}
+                      strokeLinejoin="round"
+                      pointerEvents="none"
+                    />
+                  );
+                })()}
               {outlineAtkD && (
                 <path
                   d={outlineAtkD}
@@ -1779,19 +1823,39 @@ export function MapShapeEditor({
                 if (h.length >= 3 || h.length === 0) return null;
                 const d = previewOpenOrClosed(h);
                 if (!d) return null;
+                const hl = sidebarHoverHoleIndex === hi;
                 return (
                   <path
                     key={`hole-inprogress-atk-${hi}`}
                     d={d}
                     fill="none"
-                    stroke="rgb(244,114,182)"
-                    strokeWidth={vb.width * 0.003}
+                    stroke={hl ? "rgb(251,207,232)" : "rgb(244,114,182)"}
+                    strokeWidth={vb.width * (hl ? 0.0048 : 0.003)}
                     strokeDasharray="6 4"
                     strokeLinejoin="round"
                     pointerEvents="none"
                   />
                 );
               })}
+              {sidebarHoverHoleIndex !== null &&
+                (() => {
+                  const h = outlineHoles[sidebarHoverHoleIndex];
+                  if (!h || h.length < 3) return null;
+                  const d = previewOpenOrClosed(h);
+                  if (!d) return null;
+                  return (
+                    <path
+                      key={`hole-hover-atk-${sidebarHoverHoleIndex}`}
+                      d={d}
+                      fill="rgba(244,114,182,0.2)"
+                      fillRule={h.length >= 3 ? "evenodd" : undefined}
+                      stroke="rgb(251,207,232)"
+                      strokeWidth={vb.width * 0.0045}
+                      strokeLinejoin="round"
+                      pointerEvents="none"
+                    />
+                  );
+                })()}
 
               <defs>
                 {outlineAtkD && outlineReady && (
@@ -2099,6 +2163,7 @@ export function MapShapeEditor({
               </g>
             </svg>
           </div>
+          </div>
         </div>
 
         <aside
@@ -2156,198 +2221,272 @@ export function MapShapeEditor({
           <div className="rounded-lg border border-teal-800/35 bg-slate-900/40 p-3">
             <span className="label">Map annotations</span>
             <p className="mt-1 text-xs text-violet-300/55">
-              Spawns and callouts are saved with the map. Hide reference art while tracing if it gets in the way.
+              Spawns and callouts are saved with the map. Collapse sections you
+              don&apos;t need; hide reference art while tracing if it gets in the
+              way.
             </p>
-            <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-violet-200/90">
-              <input
-                type="checkbox"
-                className="rounded border-violet-600"
-                checked={editorMeta.show_reference_image}
-                disabled={!refUrl}
-                onChange={(e) =>
-                  setEditorMeta((m) => ({
-                    ...m,
-                    show_reference_image: e.target.checked,
-                  }))
-                }
-              />
-              Show reference image
-            </label>
-            <span className="mt-3 block text-xs font-medium text-violet-200/80">
-              Next label (when placing)
-            </span>
-            <div className="mt-2 space-y-2 rounded border border-fuchsia-900/30 bg-slate-950/35 p-2">
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setLabelPlaceDefaults((d) => ({ ...d, style: "pin" }))
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                    labelPlaceDefaults.style === "pin"
-                      ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
-                      : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
-                  }`}
-                >
-                  Pin + text
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setLabelPlaceDefaults((d) => ({ ...d, style: "text" }))
-                  }
-                  className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                    labelPlaceDefaults.style === "text"
-                      ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
-                      : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
-                  }`}
-                >
-                  Text only
-                </button>
-              </div>
-              <div>
-                <label className="text-xs text-violet-300/60">
-                  Size ({labelPlaceDefaults.size.toFixed(2)}×)
-                </label>
-                <input
-                  type="range"
-                  min={0.35}
-                  max={3}
-                  step={0.05}
-                  value={labelPlaceDefaults.size}
-                  onChange={(e) =>
-                    setLabelPlaceDefaults((d) => ({
-                      ...d,
-                      size: Number(e.target.value),
-                    }))
-                  }
-                  className="mt-1 w-full accent-fuchsia-500"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="color"
-                  aria-label="Label color"
-                  value={colorInputHex(labelPlaceDefaults.color)}
-                  onChange={(e) =>
-                    setLabelPlaceDefaults((d) => ({
-                      ...d,
-                      color: e.target.value,
-                    }))
-                  }
-                  className="h-8 w-10 shrink-0 cursor-pointer rounded border border-violet-700/50 bg-transparent p-0"
-                />
-                <input
-                  type="text"
-                  value={labelPlaceDefaults.color}
-                  onChange={(e) =>
-                    setLabelPlaceDefaults((d) => ({
-                      ...d,
-                      color: e.target.value,
-                    }))
-                  }
-                  className="input-field min-w-0 flex-1 py-1 font-mono text-xs"
-                  placeholder="#e9d5ff"
-                />
-              </div>
-            </div>
-            <span className="mt-3 block text-xs font-medium text-violet-200/80">
-              Place on map
-            </span>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setPlaceMode("none")}
-                className={`rounded-md border px-2 py-1.5 text-xs font-medium ${
-                  placeMode === "none"
-                    ? "border-teal-500/60 bg-teal-950/50 text-white"
-                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
-                }`}
+            <div className="mt-3 space-y-2">
+              <details
+                open
+                className="overflow-hidden rounded-lg border border-teal-800/40 bg-slate-950/30 [&[open]>summary_.chevron-ann]:rotate-90"
               >
-                Off
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setPlaceMode((m) => (m === "spawn-atk" ? "none" : "spawn-atk"))
-                }
-                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
-                  placeMode === "spawn-atk"
-                    ? "border-violet-500/60 bg-violet-950/50 text-white"
-                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
-                }`}
-              >
-                <Swords className="h-3.5 w-3.5" />
-                Atk spawn
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setPlaceMode((m) => (m === "spawn-def" ? "none" : "spawn-def"))
-                }
-                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
-                  placeMode === "spawn-def"
-                    ? "border-sky-500/55 bg-sky-950/40 text-white"
-                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
-                }`}
-              >
-                <Shield className="h-3.5 w-3.5" />
-                Def spawn
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setPlaceMode((m) => (m === "label" ? "none" : "label"))
-                }
-                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
-                  placeMode === "label"
-                    ? "border-fuchsia-500/50 bg-fuchsia-950/35 text-white"
-                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
-                }`}
-              >
-                <Type className="h-3.5 w-3.5" />
-                Label
-              </button>
-            </div>
-            {editorMeta.spawn_markers.length > 0 && (
-              <ul className="mt-3 space-y-1 border-t border-teal-800/25 pt-2 text-xs text-violet-200/85">
-                {editorMeta.spawn_markers.map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex items-center justify-between gap-2 rounded border border-violet-800/30 px-2 py-1"
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      {s.side === "atk" ? (
-                        <Swords className="h-3.5 w-3.5 text-violet-300" />
-                      ) : (
-                        <Shield className="h-3.5 w-3.5 text-sky-300" />
-                      )}
-                      {s.side === "atk" ? "Attack" : "Defend"}
-                    </span>
-                    <button
-                      type="button"
-                      title="Remove spawn"
-                      onClick={() =>
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-2 text-sm font-medium text-teal-100/95 hover:bg-teal-950/35 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="chevron-ann h-4 w-4 shrink-0 text-teal-400 transition-transform" />
+                  <Eye className="h-4 w-4 shrink-0 text-teal-300" />
+                  <span className="min-w-0 flex-1">Reference image</span>
+                </summary>
+                <div className="space-y-2 border-t border-teal-800/30 px-2 py-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-violet-200/90">
+                    <input
+                      type="checkbox"
+                      className="rounded border-violet-600"
+                      checked={editorMeta.show_reference_image}
+                      disabled={!refUrl}
+                      onChange={(e) =>
                         setEditorMeta((m) => ({
                           ...m,
-                          spawn_markers: m.spawn_markers.filter(
-                            (x) => x.id !== s.id,
-                          ),
+                          show_reference_image: e.target.checked,
                         }))
                       }
-                      className="shrink-0 rounded p-1 text-fuchsia-300 hover:bg-fuchsia-950/40"
+                    />
+                    Show reference image
+                  </label>
+                  {!refUrl && (
+                    <p className="text-xs text-violet-400/70">
+                      Upload a reference image first to toggle visibility.
+                    </p>
+                  )}
+                </div>
+              </details>
+
+              <details
+                open
+                className="overflow-hidden rounded-lg border border-fuchsia-900/35 bg-slate-950/30 [&[open]>summary_.chevron-ann]:rotate-90"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-2 text-sm font-medium text-fuchsia-100/95 hover:bg-fuchsia-950/25 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="chevron-ann h-4 w-4 shrink-0 text-fuchsia-400 transition-transform" />
+                  <Type className="h-4 w-4 shrink-0 text-fuchsia-300" />
+                  <span className="min-w-0 flex-1">Next label (when placing)</span>
+                </summary>
+                <div className="space-y-2 border-t border-fuchsia-900/25 px-2 py-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLabelPlaceDefaults((d) => ({ ...d, style: "pin" }))
+                      }
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                        labelPlaceDefaults.style === "pin"
+                          ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                          : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                      }`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      Pin + text
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {editorMeta.location_labels.length > 0 && (
-              <div className="mt-3 space-y-2 border-t border-teal-800/25 pt-2">
-                <span className="text-xs font-medium text-violet-200/80">
-                  Location labels
-                </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLabelPlaceDefaults((d) => ({ ...d, style: "text" }))
+                      }
+                      className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                        labelPlaceDefaults.style === "text"
+                          ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                          : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                      }`}
+                    >
+                      Text only
+                    </button>
+                  </div>
+                  <div>
+                    <label className="text-xs text-violet-300/60">
+                      Size ({labelPlaceDefaults.size.toFixed(2)}×)
+                    </label>
+                    <input
+                      type="range"
+                      min={0.35}
+                      max={3}
+                      step={0.05}
+                      value={labelPlaceDefaults.size}
+                      onChange={(e) =>
+                        setLabelPlaceDefaults((d) => ({
+                          ...d,
+                          size: Number(e.target.value),
+                        }))
+                      }
+                      className="mt-1 w-full accent-fuchsia-500"
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="color"
+                      aria-label="Label color"
+                      value={colorInputHex(labelPlaceDefaults.color)}
+                      onChange={(e) =>
+                        setLabelPlaceDefaults((d) => ({
+                          ...d,
+                          color: e.target.value,
+                        }))
+                      }
+                      className="h-8 w-10 shrink-0 cursor-pointer rounded border border-violet-700/50 bg-transparent p-0"
+                    />
+                    <input
+                      type="text"
+                      value={labelPlaceDefaults.color}
+                      onChange={(e) =>
+                        setLabelPlaceDefaults((d) => ({
+                          ...d,
+                          color: e.target.value,
+                        }))
+                      }
+                      className="input-field min-w-0 flex-1 py-1 font-mono text-xs"
+                      placeholder="#e9d5ff"
+                    />
+                  </div>
+                </div>
+              </details>
+
+              <details
+                open
+                className="overflow-hidden rounded-lg border border-violet-800/40 bg-slate-950/30 [&[open]>summary_.chevron-ann]:rotate-90"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-2 text-sm font-medium text-violet-100/95 hover:bg-violet-950/35 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="chevron-ann h-4 w-4 shrink-0 text-violet-400 transition-transform" />
+                  <Plus className="h-4 w-4 shrink-0 text-violet-300" />
+                  <span className="min-w-0 flex-1">Place on map</span>
+                </summary>
+                <div className="space-y-2 border-t border-violet-800/30 px-2 py-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPlaceMode("none")}
+                      className={`rounded-md border px-2 py-1.5 text-xs font-medium ${
+                        placeMode === "none"
+                          ? "border-teal-500/60 bg-teal-950/50 text-white"
+                          : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                      }`}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPlaceMode((m) =>
+                          m === "spawn-atk" ? "none" : "spawn-atk",
+                        )
+                      }
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                        placeMode === "spawn-atk"
+                          ? "border-violet-500/60 bg-violet-950/50 text-white"
+                          : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                      }`}
+                    >
+                      <Swords className="h-3.5 w-3.5" />
+                      Atk spawn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPlaceMode((m) =>
+                          m === "spawn-def" ? "none" : "spawn-def",
+                        )
+                      }
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                        placeMode === "spawn-def"
+                          ? "border-sky-500/55 bg-sky-950/40 text-white"
+                          : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                      }`}
+                    >
+                      <Shield className="h-3.5 w-3.5" />
+                      Def spawn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPlaceMode((m) => (m === "label" ? "none" : "label"))
+                      }
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                        placeMode === "label"
+                          ? "border-fuchsia-500/50 bg-fuchsia-950/35 text-white"
+                          : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                      }`}
+                    >
+                      <Type className="h-3.5 w-3.5" />
+                      Label
+                    </button>
+                  </div>
+                </div>
+              </details>
+
+              <details
+                className="overflow-hidden rounded-lg border border-violet-800/40 bg-slate-950/30 [&[open]>summary_.chevron-ann]:rotate-90"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-2 text-sm font-medium text-violet-100/95 hover:bg-violet-950/35 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="chevron-ann h-4 w-4 shrink-0 text-violet-400 transition-transform" />
+                  <Swords className="h-4 w-4 shrink-0 text-violet-300" />
+                  <span className="min-w-0 flex-1">Spawn markers</span>
+                  <span className="font-mono text-xs font-normal text-violet-500">
+                    {editorMeta.spawn_markers.length}
+                  </span>
+                </summary>
+                <div className="border-t border-violet-800/30 px-2 py-2">
+                  {editorMeta.spawn_markers.length === 0 ? (
+                    <p className="text-xs text-violet-400/70">
+                      None yet — use Place on map → Atk or Def spawn.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1 text-xs text-violet-200/85">
+                      {editorMeta.spawn_markers.map((s) => (
+                        <li
+                          key={s.id}
+                          className="flex items-center justify-between gap-2 rounded border border-violet-800/30 px-2 py-1"
+                        >
+                          <span className="inline-flex items-center gap-1.5">
+                            {s.side === "atk" ? (
+                              <Swords className="h-3.5 w-3.5 text-violet-300" />
+                            ) : (
+                              <Shield className="h-3.5 w-3.5 text-sky-300" />
+                            )}
+                            {s.side === "atk" ? "Attack" : "Defend"}
+                          </span>
+                          <button
+                            type="button"
+                            title="Remove spawn"
+                            onClick={() =>
+                              setEditorMeta((m) => ({
+                                ...m,
+                                spawn_markers: m.spawn_markers.filter(
+                                  (x) => x.id !== s.id,
+                                ),
+                              }))
+                            }
+                            className="shrink-0 rounded p-1 text-fuchsia-300 hover:bg-fuchsia-950/40"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </details>
+
+              <details
+                className="overflow-hidden rounded-lg border border-fuchsia-900/35 bg-slate-950/30 [&[open]>summary_.chevron-ann]:rotate-90"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-2 text-sm font-medium text-fuchsia-100/95 hover:bg-fuchsia-950/25 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="chevron-ann h-4 w-4 shrink-0 text-fuchsia-400 transition-transform" />
+                  <MapPin className="h-4 w-4 shrink-0 text-fuchsia-300" />
+                  <span className="min-w-0 flex-1">Location labels</span>
+                  <span className="font-mono text-xs font-normal text-violet-500">
+                    {editorMeta.location_labels.length}
+                  </span>
+                </summary>
+                <div className="space-y-2 border-t border-fuchsia-900/25 px-2 py-2">
+                  {editorMeta.location_labels.length === 0 ? (
+                    <p className="text-xs text-violet-400/70">
+                      None yet — use Place on map → Label.
+                    </p>
+                  ) : null}
                 {editorMeta.location_labels.map((l) => (
                   <div
                     key={l.id}
@@ -2483,8 +2622,9 @@ export function MapShapeEditor({
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
+                </div>
+              </details>
+            </div>
           </div>
 
           <div>
@@ -2496,6 +2636,7 @@ export function MapShapeEditor({
                   setActiveLayer({ kind: "outline", holeIndex: null });
                   setSelection(null);
                 }}
+                onMouseEnter={() => setSidebarHoverHoleIndex(null)}
                 className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm ${
                   activeLayer.kind === "outline" &&
                   activeLayer.holeIndex === null
@@ -2518,15 +2659,22 @@ export function MapShapeEditor({
                     {outlineHoles.length}
                   </span>
                 </summary>
-                <div className="space-y-1 border-t border-pink-800/25 px-1 py-2">
+                <div
+                  className="space-y-1 border-t border-pink-800/25 px-1 py-2"
+                  onMouseLeave={() => setSidebarHoverHoleIndex(null)}
+                >
                   {outlineHoles.map((hole, hi) => (
                     <div
                       key={`hole-layer-${hi}`}
-                      className={`flex items-center gap-1 ${
+                      onMouseEnter={() => {
+                        setSidebarHoverOverlayId(null);
+                        setSidebarHoverHoleIndex(hi);
+                      }}
+                      className={`flex items-center gap-1 rounded-lg transition-colors ${
                         activeLayer.kind === "outline" &&
                         activeLayer.holeIndex === hi
-                          ? "rounded-lg border border-pink-500/35 bg-pink-950/20 p-1"
-                          : ""
+                          ? "border border-pink-500/35 bg-pink-950/20 p-1"
+                          : "border border-transparent p-1 hover:bg-pink-950/35"
                       }`}
                     >
                       <button
@@ -2562,6 +2710,7 @@ export function MapShapeEditor({
                   <button
                     type="button"
                     onClick={addOutlineHole}
+                    onMouseEnter={() => setSidebarHoverHoleIndex(null)}
                     disabled={!outlineReady}
                     title={
                       outlineReady
@@ -2577,7 +2726,10 @@ export function MapShapeEditor({
               </details>
               <div
                 className="space-y-2"
-                onMouseLeave={() => setSidebarHoverOverlayId(null)}
+                onMouseLeave={() => {
+                  setSidebarHoverOverlayId(null);
+                  setSidebarHoverHoleIndex(null);
+                }}
               >
                 {OVERLAY_KIND_ORDER.map((kind) => {
                   const items = overlays.filter((o) => o.kind === kind);
@@ -2633,9 +2785,10 @@ export function MapShapeEditor({
                             <div
                               key={sh.id}
                               className={`flex items-center gap-1 ${activeRing}`}
-                              onMouseEnter={() =>
-                                setSidebarHoverOverlayId(sh.id)
-                              }
+                              onMouseEnter={() => {
+                                setSidebarHoverHoleIndex(null);
+                                setSidebarHoverOverlayId(sh.id);
+                              }}
                             >
                               <button
                                 type="button"
@@ -2883,6 +3036,24 @@ export function MapShapeEditor({
           </div>
         </aside>
       </div>
+
+      {saveToast && (
+        <div
+          role="status"
+          className={`fixed bottom-6 left-1/2 z-[100] flex max-w-[min(calc(100vw-2rem),24rem)] -translate-x-1/2 items-start gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg ${
+            saveToast.kind === "ok"
+              ? "border-emerald-600/50 bg-emerald-950/95 text-emerald-50"
+              : "border-red-600/50 bg-red-950/95 text-red-50"
+          }`}
+        >
+          {saveToast.kind === "ok" ? (
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400" />
+          ) : (
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
+          )}
+          <span>{saveToast.msg}</span>
+        </div>
+      )}
     </div>
   );
 }
