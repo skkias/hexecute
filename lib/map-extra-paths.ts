@@ -1,5 +1,10 @@
-import type { MapOverlayKind, MapOverlayShape } from "@/types/catalog";
+import type {
+  MapOverlayCircle,
+  MapOverlayKind,
+  MapOverlayShape,
+} from "@/types/catalog";
 import type { MapPoint } from "@/lib/map-path";
+import { circleToGradeClosedPoints } from "@/lib/map-overlay-geometry";
 
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -59,7 +64,37 @@ export function normalizeExtraPaths(raw: unknown): MapOverlayShape[] {
       const g = o.gradeHighSide;
       gradeHighSide = g === -1 ? -1 : 1;
     }
-    out.push({ id, kind, points, gradeHighSide });
+    let circle: MapOverlayCircle | null = null;
+    const cr = o.circle;
+    if (cr && typeof cr === "object") {
+      const crec = cr as Record<string, unknown>;
+      const cx = asFiniteNumber(crec.cx);
+      const cy = asFiniteNumber(crec.cy);
+      const rad = asFiniteNumber(crec.r);
+      if (
+        cx !== null &&
+        cy !== null &&
+        rad !== null &&
+        rad > 0
+      ) {
+        circle = { cx, cy, r: rad };
+      }
+    }
+    if (circle) {
+      if (kind === "grade") {
+        out.push({
+          id,
+          kind,
+          points: circleToGradeClosedPoints(circle),
+          circle,
+          gradeHighSide,
+        });
+      } else {
+        out.push({ id, kind, points: [], circle, gradeHighSide });
+      }
+    } else {
+      out.push({ id, kind, points, gradeHighSide });
+    }
   }
   return out;
 }

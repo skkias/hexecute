@@ -10,6 +10,15 @@ const DEFAULT_LABEL_STYLE: MapLocationLabelStyle = "pin";
 const DEFAULT_LABEL_COLOR = "#e9d5ff";
 const DEFAULT_LABEL_SIZE = 1;
 const DEFAULT_LABEL_TEXT_ANCHOR: MapLabelTextAnchor = "right";
+const DEFAULT_LABEL_TEXT_ROTATION_DEG = 0;
+
+function normalizeLabelTextRotationDeg(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_LABEL_TEXT_ROTATION_DEG;
+  let d = ((n % 360) + 360) % 360;
+  if (d > 180) d -= 360;
+  return d;
+}
 
 function clampLabelSize(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
@@ -90,6 +99,7 @@ export function normalizeEditorMeta(raw: unknown): MapEditorMeta {
           color: normalizeLabelColor(m.color),
           size: clampLabelSize(m.size),
           text_anchor: normalizeLabelTextAnchor(m.text_anchor),
+          text_rotation_deg: normalizeLabelTextRotationDeg(m.text_rotation_deg),
         });
       }
     }

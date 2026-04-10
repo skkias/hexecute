@@ -16,6 +16,7 @@ import type {
   MapImageTransform,
   MapLabelTextAnchor,
   MapLocationLabelStyle,
+  MapOverlayCircle,
   MapOverlayKind,
   MapOverlayShape,
 } from "@/types/catalog";
@@ -25,10 +26,19 @@ import {
   alignPointsHorizontal,
   alignPointsVertical,
   flipPointsOverHorizontalMidline,
+  flipPointsOverVerticalMidline,
   ringsToPathD,
   type MapPoint,
 } from "@/lib/map-path";
 import { mapLabelTextSvgProps } from "@/lib/map-label-layout";
+import {
+  circleToGradeClosedPoints,
+  circleToPolygon,
+  clampCircleInPlayableRegion,
+  isCircleOverlay,
+  OVERLAY_CIRCLE_SEGMENTS,
+  sanitizeOverlayForSave,
+} from "@/lib/map-overlay-geometry";
 import { normalizeEditorMeta } from "@/lib/map-editor-meta";
 import { normalizeExtraPaths } from "@/lib/map-extra-paths";
 import {
@@ -53,10 +63,11 @@ import {
   BrickWall,
   CheckCircle2,
   ChevronRight,
+  Circle as CircleIcon,
   CircleSlash2,
   Eye,
   EyeOff,
-  FlipVertical2,
+  FlipHorizontal2,
   ImagePlus,
   Loader2,
   MapPin,
@@ -84,6 +95,14 @@ const LABEL_ANCHOR_OPTIONS: ReadonlyArray<{
   { value: "left", title: "Text to the left", Icon: ArrowLeft },
 ];
 
+/** SVG `rotate(deg)` clockwise; ±90° for vertical hallways. */
+const LABEL_ROTATION_PRESETS: ReadonlyArray<{ deg: number; short: string }> = [
+  { deg: 0, short: "0°" },
+  { deg: 90, short: "90°" },
+  { deg: -90, short: "−90°" },
+  { deg: 180, short: "180°" },
+];
+
 type Tool = "draw" | "edit";
 
 type ActiveLayer =
@@ -101,6 +120,8 @@ type DragState = {
   snapshot: MapPoint[];
   layer: ActiveLayer;
   indices: number[];
+  /** Overlay circle edit (center vs rim handle). */
+  overlayCircleSnapshot?: MapOverlayCircle;
 };
 
 /** Visible window into canvas space (does not change saved coordinates). */
@@ -126,6 +147,9 @@ type AnnotationDragState = {
 };
 
 type PlaceAnnotationMode = "none" | "spawn-atk" | "spawn-def" | "label";
+
+/** Polygon vertex-by-vertex vs two-click circle (outline rings + overlays). */
+type DrawShapeMode = "polygon" | "circle";
 
 /** Map canvas panel: grow with layout but cap on huge viewports (e.g. 4K @ 150%). */
 const MAP_VIEWPORT_MIN_W_PX = 280;
@@ -262,7 +286,10 @@ function GradeOverlaySvg({
   /** Sidebar row hover → brighter stroke/fill on canvas */
   highlight?: boolean;
 }) {
-  const pts = sh.points;
+  const pts =
+    isCircleOverlay(sh) && sh.circle
+      ? circleToGradeClosedPoints(sh.circle)
+      : sh.points;
   const sw = vbWidth * 0.0035 * (highlight ? 1.35 : 1);
   const side = sh.gradeHighSide ?? 1;
   const lineStroke = highlight ? "rgb(207,250,254)" : "rgb(34,211,238)";
@@ -476,13 +503,35 @@ export function MapShapeEditor({
   );
   /** Click map to place spawns/labels; not persisted. */
   const [placeMode, setPlaceMode] = useState<PlaceAnnotationMode>("none");
+  const [drawShapeMode, setDrawShapeMode] = useState<DrawShapeMode>("polygon");
+  /** First click of a two-click circle (outline ring or overlay). */
+  const [pendingCircle, setPendingCircle] = useState<
+    | {
+        kind: "outline";
+        holeIndex: number | null;
+        center: MapPoint;
+      }
+    | {
+        kind: "overlay";
+        overlayId: string;
+        center: MapPoint;
+      }
+    | null
+  >(null);
   /** Style/color/size for the next label placed on the map (each label stores its own). */
   const [labelPlaceDefaults, setLabelPlaceDefaults] = useState<{
     style: MapLocationLabelStyle;
     color: string;
     size: number;
     text_anchor: MapLabelTextAnchor;
-  }>({ style: "pin", color: "#e9d5ff", size: 1, text_anchor: "right" });
+    text_rotation_deg: number;
+  }>({
+    style: "pin",
+    color: "#e9d5ff",
+    size: 1,
+    text_anchor: "right",
+    text_rotation_deg: 0,
+  });
   const annotationDragRef = useRef<AnnotationDragState | null>(null);
 
   const clipId = useId().replace(/:/g, "");
@@ -625,6 +674,12 @@ export function MapShapeEditor({
   }, [saveToast]);
 
   useEffect(() => {
+    if (tool !== "draw" || drawShapeMode !== "circle") {
+      setPendingCircle(null);
+    }
+  }, [tool, drawShapeMode]);
+
+  useEffect(() => {
     const onDocumentContextMenu = (e: MouseEvent) => {
       if (isEditableContextTarget(e.target)) return;
       e.preventDefault();
@@ -681,10 +736,18 @@ export function MapShapeEditor({
     if (outlineOuter.length < 3) return;
     queueMicrotask(() => {
       setOverlays((prev) =>
-        prev.map((s) => ({
-          ...s,
-          points: clampPointsToOutline(s.points, outlineOuter, outlineHoles),
-        })),
+        prev.map((s) =>
+          isCircleOverlay(s)
+            ? sanitizeOverlayForSave(s, outlineOuter, outlineHoles)
+            : {
+                ...s,
+                points: clampPointsToOutline(
+                  s.points,
+                  outlineOuter,
+                  outlineHoles,
+                ),
+              },
+        ),
       );
     });
   }, [outlineOuter, outlineHoles]);
@@ -743,6 +806,19 @@ export function MapShapeEditor({
         if (!pointInOutlineWithHoles(p, outlineOuter, outlineHoles)) {
           setBanner(
             "Overlays must sit inside the purple map outline (not in cutouts).",
+          );
+          return;
+        }
+        const id = activeLayer.id;
+        const sh = overlays.find((o) => o.id === id);
+        if (sh?.circle) {
+          setBanner(null);
+          setOverlays((list) =>
+            list.map((s) =>
+              s.id === id
+                ? { ...s, points: [...s.points, p], circle: undefined }
+                : s,
+            ),
           );
           return;
         }
@@ -809,6 +885,7 @@ export function MapShapeEditor({
       } else {
         const sh = overlays.find((o) => o.id === al.id);
         if (!sh) return false;
+        if (isCircleOverlay(sh)) return false;
         points = sh.points;
         closed = sh.kind === "grade" ? false : points.length >= 3;
       }
@@ -1028,6 +1105,7 @@ export function MapShapeEditor({
                 color: d.color,
                 size: d.size,
                 text_anchor: d.text_anchor,
+                text_rotation_deg: d.text_rotation_deg,
               },
             ],
           }));
@@ -1045,9 +1123,123 @@ export function MapShapeEditor({
       const svg = svgRef.current;
       if (!svg) return;
       const p = clientToSvg(svg, e.clientX, e.clientY);
+
+      if (drawShapeMode === "circle" && placeMode === "none") {
+        if (activeLayer.kind === "outline") {
+          if (!outlineReady) {
+            setBanner("Close the outer outline (≥3 points) before circle shapes.");
+            return;
+          }
+          if (!pointInOutlineWithHoles(p, outlineOuter, outlineHoles)) {
+            setBanner(
+              "Circle must start inside the purple playable area (not in holes).",
+            );
+            return;
+          }
+          const hi = activeLayer.holeIndex;
+          const pending = pendingCircle;
+          if (
+            !pending ||
+            pending.kind !== "outline" ||
+            pending.holeIndex !== hi
+          ) {
+            setPendingCircle({ kind: "outline", holeIndex: hi, center: p });
+            setBanner("Click again to set the circle radius.");
+            return;
+          }
+          const minR = vbRef.current.width * 0.001;
+          const r = Math.hypot(p.x - pending.center.x, p.y - pending.center.y);
+          if (r < minR) {
+            setBanner("Radius too small — click farther from the center.");
+            return;
+          }
+          const c = clampCircleInPlayableRegion(
+            { cx: pending.center.x, cy: pending.center.y, r },
+            outlineOuter,
+            outlineHoles,
+          );
+          const ring = circleToPolygon(c, OVERLAY_CIRCLE_SEGMENTS);
+          if (hi === null) {
+            setOutlineOuter(ring);
+          } else {
+            setOutlineHoles((holes) =>
+              holes.map((h, j) => (j === hi ? ring : h)),
+            );
+          }
+          setPendingCircle(null);
+          setBanner(null);
+          return;
+        }
+        if (activeLayer.kind === "overlay") {
+          if (!outlineReady) {
+            setBanner(
+              "Draw the map outline first before placing overlay circles.",
+            );
+            return;
+          }
+          if (!pointInOutlineWithHoles(p, outlineOuter, outlineHoles)) {
+            setBanner(
+              "Circles must sit inside the purple map outline (not in cutouts).",
+            );
+            return;
+          }
+          const oid = activeLayer.id;
+          const pending = pendingCircle;
+          if (
+            !pending ||
+            pending.kind !== "overlay" ||
+            pending.overlayId !== oid
+          ) {
+            setPendingCircle({ kind: "overlay", overlayId: oid, center: p });
+            setBanner("Click again to set the circle radius.");
+            return;
+          }
+          const minR = vbRef.current.width * 0.001;
+          const r = Math.hypot(p.x - pending.center.x, p.y - pending.center.y);
+          if (r < minR) {
+            setBanner("Radius too small — click farther from the center.");
+            return;
+          }
+          const c = clampCircleInPlayableRegion(
+            { cx: pending.center.x, cy: pending.center.y, r },
+            outlineOuter,
+            outlineHoles,
+          );
+          setOverlays((list) =>
+            list.map((s) => {
+              if (s.id !== oid) return s;
+              if (s.kind === "grade") {
+                return {
+                  ...s,
+                  circle: c,
+                  points: circleToGradeClosedPoints(c),
+                };
+              }
+              return { ...s, circle: c, points: [] };
+            }),
+          );
+          setPendingCircle(null);
+          setBanner(null);
+          return;
+        }
+      }
+
       addPoint(p);
     },
-    [tool, addPoint, viewport, tryInsertPointOnEdge, placeMode, labelPlaceDefaults],
+    [
+      tool,
+      addPoint,
+      viewport,
+      tryInsertPointOnEdge,
+      placeMode,
+      labelPlaceDefaults,
+      drawShapeMode,
+      pendingCircle,
+      activeLayer,
+      outlineReady,
+      outlineOuter,
+      outlineHoles,
+    ],
   );
 
   const onSvgPointerMove = useCallback(
@@ -1159,6 +1351,8 @@ export function MapShapeEditor({
           snapshot: [...sh.points],
           layer,
           indices,
+          overlayCircleSnapshot:
+            isCircleOverlay(sh) && sh.circle ? { ...sh.circle } : undefined,
         };
       }
       (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
@@ -1202,6 +1396,46 @@ export function MapShapeEditor({
       } else {
         const id = d.layer.id;
         const { outer, holes } = outlineRingsRef.current;
+        if (d.overlayCircleSnapshot && d.layer.kind === "overlay") {
+          const start = d.overlayCircleSnapshot;
+          const minR = Math.max(1e-9, vbRef.current.width * 0.0008);
+          setOverlays((list) =>
+            list.map((s) => {
+              if (s.id !== id) return s;
+              let nextCircle: MapOverlayCircle;
+              if (d.indices.includes(0)) {
+                nextCircle = {
+                  cx: start.cx + dx,
+                  cy: start.cy + dy,
+                  r: start.r,
+                };
+              } else {
+                nextCircle = {
+                  cx: start.cx,
+                  cy: start.cy,
+                  r: Math.max(
+                    minR,
+                    Math.hypot(cur.x - start.cx, cur.y - start.cy),
+                  ),
+                };
+              }
+              nextCircle = clampCircleInPlayableRegion(
+                nextCircle,
+                outer,
+                holes,
+              );
+              if (s.kind === "grade") {
+                return {
+                  ...s,
+                  circle: nextCircle,
+                  points: circleToGradeClosedPoints(nextCircle),
+                };
+              }
+              return { ...s, circle: nextCircle, points: [] };
+            }),
+          );
+          return;
+        }
         setOverlays((list) =>
           list.map((s) => {
             if (s.id !== id) return s;
@@ -1266,6 +1500,8 @@ export function MapShapeEditor({
       snapshot: [...sh.points],
       layer,
       indices,
+      overlayCircleSnapshot:
+        isCircleOverlay(sh) && sh.circle ? { ...sh.circle } : undefined,
     };
     (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
   }
@@ -1275,7 +1511,16 @@ export function MapShapeEditor({
   }
 
   function clearActiveShape() {
-    setActivePoints(() => []);
+    if (activeLayer.kind === "overlay") {
+      const id = activeLayer.id;
+      setOverlays((list) =>
+        list.map((s) =>
+          s.id === id ? { ...s, points: [], circle: undefined } : s,
+        ),
+      );
+    } else {
+      setActivePoints(() => []);
+    }
     setSelection(null);
   }
 
@@ -1300,18 +1545,17 @@ export function MapShapeEditor({
       const sid = selection.shapeId;
       const idx = selection.indices;
       setOverlays((list) =>
-        list.map((s) =>
-          s.id === sid
-            ? {
-                ...s,
-                points: clampPointsToOutline(
-                  alignPointsVertical(s.points, idx),
-                  outlineOuter,
-                  outlineHoles,
-                ),
-              }
-            : s,
-        ),
+        list.map((s) => {
+          if (s.id !== sid || isCircleOverlay(s)) return s;
+          return {
+            ...s,
+            points: clampPointsToOutline(
+              alignPointsVertical(s.points, idx),
+              outlineOuter,
+              outlineHoles,
+            ),
+          };
+        }),
       );
     }
   }
@@ -1337,18 +1581,17 @@ export function MapShapeEditor({
       const sid = selection.shapeId;
       const idx = selection.indices;
       setOverlays((list) =>
-        list.map((s) =>
-          s.id === sid
-            ? {
-                ...s,
-                points: clampPointsToOutline(
-                  alignPointsHorizontal(s.points, idx),
-                  outlineOuter,
-                  outlineHoles,
-                ),
-              }
-            : s,
-        ),
+        list.map((s) => {
+          if (s.id !== sid || isCircleOverlay(s)) return s;
+          return {
+            ...s,
+            points: clampPointsToOutline(
+              alignPointsHorizontal(s.points, idx),
+              outlineOuter,
+              outlineHoles,
+            ),
+          };
+        }),
       );
     }
   }
@@ -1369,8 +1612,8 @@ export function MapShapeEditor({
     setOverlays((list) => [
       ...list,
       kind === "grade"
-        ? { id, kind, points: [], gradeHighSide: 1 as const }
-        : { id, kind, points: [] },
+        ? { id, kind, points: [], gradeHighSide: 1 as const, circle: undefined }
+        : { id, kind, points: [], circle: undefined },
     ]);
     setActiveLayer({ kind: "overlay", id });
     setTool("draw");
@@ -1401,25 +1644,50 @@ export function MapShapeEditor({
     setBanner(null);
     const rect = vbRef.current;
     const { outer, holes } = outlineRingsRef.current;
-    const nextOuter = flipPointsOverHorizontalMidline(rect, outer);
+    const nextOuter = flipPointsOverVerticalMidline(rect, outer);
     const nextHoles = holes.map((h) =>
-      flipPointsOverHorizontalMidline(rect, h),
+      flipPointsOverVerticalMidline(rect, h),
     );
     setOutlineOuter(nextOuter);
     setOutlineHoles(nextHoles);
     setOverlays((list) =>
-      list.map((s) => ({
-        ...s,
-        points: clampPointsToOutline(
-          flipPointsOverHorizontalMidline(rect, s.points),
-          nextOuter,
-          nextHoles,
-        ),
-      })),
+      list.map((s) => {
+        const gradeSide =
+          s.kind === "grade"
+            ? ((s.gradeHighSide ?? 1) === 1 ? (-1 as const) : (1 as const))
+            : undefined;
+        if (s.circle && s.circle.r > 0) {
+          const q = flipPointsOverVerticalMidline(rect, [
+            { x: s.circle.cx, y: s.circle.cy },
+          ])[0]!;
+          let nc = { cx: q.x, cy: q.y, r: s.circle.r };
+          nc = clampCircleInPlayableRegion(nc, nextOuter, nextHoles);
+          if (s.kind === "grade") {
+            return {
+              ...s,
+              circle: nc,
+              points: circleToGradeClosedPoints(nc),
+              gradeHighSide: gradeSide,
+            };
+          }
+          return { ...s, circle: nc, points: [] };
+        }
+        return {
+          ...s,
+          points: clampPointsToOutline(
+            flipPointsOverVerticalMidline(rect, s.points),
+            nextOuter,
+            nextHoles,
+          ),
+          ...(s.kind === "grade" && gradeSide !== undefined
+            ? { gradeHighSide: gradeSide }
+            : {}),
+        };
+      }),
     );
     setEditorMeta((em) => {
       const flip = (p: MapPoint) =>
-        flipPointsOverHorizontalMidline(rect, [p])[0] ?? p;
+        flipPointsOverVerticalMidline(rect, [p])[0] ?? p;
       return {
         ...em,
         spawn_markers: em.spawn_markers.map((s) => {
@@ -1428,7 +1696,19 @@ export function MapShapeEditor({
         }),
         location_labels: em.location_labels.map((l) => {
           const q = flip({ x: l.x, y: l.y });
-          return { ...l, x: q.x, y: q.y };
+          const text_anchor: MapLabelTextAnchor =
+            l.text_anchor === "left"
+              ? "right"
+              : l.text_anchor === "right"
+                ? "left"
+                : l.text_anchor;
+          return {
+            ...l,
+            x: q.x,
+            y: q.y,
+            text_anchor,
+            text_rotation_deg: -l.text_rotation_deg,
+          };
         }),
       };
     });
@@ -1473,14 +1753,7 @@ export function MapShapeEditor({
     );
     const sanitizedOverlays =
       outlineReady
-        ? overlays.map((s) => {
-            const clamped = clampPointsToOutline(
-              s.points,
-              outlineOuter,
-              outlineHoles,
-            );
-            return { ...s, points: clamped };
-          })
+        ? overlays.map((s) => sanitizeOverlayForSave(s, outlineOuter, outlineHoles))
         : overlays;
     const payload = {
       reference_image_url: refUrl,
@@ -1703,9 +1976,9 @@ export function MapShapeEditor({
                   onClick={swapAttackDefenseSides}
                   disabled={outlineOuter.length < 1}
                   className="btn-secondary inline-flex shrink-0 items-center gap-1 px-2 py-1 disabled:opacity-40"
-                  title="Flip stored attack outline and overlays to the opposite half of the map (use if attack/defense look inverted)"
+                  title="Flip stored attack outline and overlays left–right (use if the reference image is mirrored or sites are reversed east–west)"
                 >
-                  <FlipVertical2 className="h-3.5 w-3.5" />
+                  <FlipHorizontal2 className="h-3.5 w-3.5" />
                   Swap sides
                 </button>
                 <span className="shrink-0 whitespace-nowrap text-violet-300/40">
@@ -1915,6 +2188,23 @@ export function MapShapeEditor({
                       />
                     );
                   }
+                  if (isCircleOverlay(sh) && sh.circle) {
+                    const poly = overlayPolygonStyleHover(sh.kind, hl);
+                    if (!poly) return null;
+                    const c = sh.circle;
+                    return (
+                      <circle
+                        key={sh.id}
+                        cx={c.cx}
+                        cy={c.cy}
+                        r={c.r}
+                        fill={poly.fill}
+                        stroke={poly.stroke}
+                        strokeWidth={vb.width * 0.003 * (hl ? 2.2 : 1)}
+                        pointerEvents="none"
+                      />
+                    );
+                  }
                   const d = previewOpenOrClosed(sh.points);
                   if (!d) return null;
                   const poly = overlayPolygonStyleHover(sh.kind, hl);
@@ -1936,7 +2226,7 @@ export function MapShapeEditor({
               {tool === "edit" &&
                 outlineReady &&
                 overlays.flatMap((sh) =>
-                  sh.points.flatMap((p, i) => {
+                  (isCircleOverlay(sh) ? [] : sh.points).flatMap((p, i) => {
                     if (
                       activeLayer.kind === "overlay" &&
                       activeLayer.id === sh.id
@@ -2050,6 +2340,47 @@ export function MapShapeEditor({
                 (() => {
                   const activeOv = overlays.find((s) => s.id === activeLayer.id);
                   if (!activeOv) return null;
+                  if (isCircleOverlay(activeOv) && activeOv.circle) {
+                    const c = activeOv.circle;
+                    const rim = { x: c.cx + c.r, y: c.cy };
+                    const handles: { p: MapPoint; i: number }[] = [
+                      { p: { x: c.cx, y: c.cy }, i: 0 },
+                      { p: rim, i: 1 },
+                    ];
+                    return handles.map(({ p, i }) => {
+                      const sel =
+                        selection?.kind === "overlay" &&
+                        selection.shapeId === activeLayer.id &&
+                        selection.indices.includes(i);
+                      return (
+                        <circle
+                          key={`ov-${activeLayer.id}-c${i}`}
+                          cx={p.x}
+                          cy={p.y}
+                          r={hitRadius}
+                          fill={overlayActiveVertexFill(activeOv.kind, sel)}
+                          fillOpacity={tool === "draw" ? 0.35 : 0.95}
+                          stroke="white"
+                          strokeWidth={vertexStrokeW}
+                          style={{
+                            cursor:
+                              tool === "edit" ? "grab" : "crosshair",
+                            pointerEvents: tool === "draw" ? "none" : "auto",
+                          }}
+                          onPointerDown={(e) =>
+                            onVertexPointerDown(
+                              e,
+                              { kind: "overlay", id: activeLayer.id },
+                              i,
+                            )
+                          }
+                          onPointerMove={onVertexPointerMove}
+                          onPointerUp={onVertexPointerUp}
+                          onPointerCancel={onVertexPointerUp}
+                        />
+                      );
+                    });
+                  }
                   return activeOv.points.map((p, i) => {
                     const sel =
                       selection?.kind === "overlay" &&
@@ -2131,11 +2462,17 @@ export function MapShapeEditor({
                     isPin: l.style === "pin",
                     textOnlyGap,
                   });
+                  const rot = l.text_rotation_deg ?? 0;
+                  const textRotate =
+                    rot !== 0 && Number.isFinite(rot)
+                      ? `rotate(${rot}, ${tp.x}, ${tp.y})`
+                      : undefined;
                   if (l.style === "text") {
                     return (
                       <text
                         key={`label-${l.id}`}
                         data-map-ann="label"
+                        transform={textRotate}
                         x={tp.x}
                         y={tp.y}
                         textAnchor={tp.textAnchor}
@@ -2187,6 +2524,7 @@ export function MapShapeEditor({
                         }}
                       />
                       <text
+                        transform={textRotate}
                         x={tp.x}
                         y={tp.y}
                         textAnchor={tp.textAnchor}
@@ -2263,6 +2601,47 @@ export function MapShapeEditor({
                 Edit
               </button>
             </div>
+            {tool === "draw" && (
+              <div className="mt-2">
+                <span className="text-[11px] text-violet-300/55">Draw shape</span>
+                <div className="mt-1 flex rounded-lg border border-violet-800/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDrawShapeMode("polygon");
+                      setPendingCircle(null);
+                    }}
+                    className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium ${
+                      drawShapeMode === "polygon"
+                        ? "bg-violet-600 text-white"
+                        : "text-violet-200/70 hover:text-white"
+                    }`}
+                  >
+                    Polygon
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDrawShapeMode("circle");
+                      setPendingCircle(null);
+                    }}
+                    className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium ${
+                      drawShapeMode === "circle"
+                        ? "bg-violet-600 text-white"
+                        : "text-violet-200/70 hover:text-white"
+                    }`}
+                  >
+                    <CircleIcon className="h-3.5 w-3.5" />
+                    Circle
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-violet-300/45">
+                  {drawShapeMode === "circle"
+                    ? "First click: center. Second click: radius (distance from center)."
+                    : "Each click adds a vertex; shapes close automatically when complete."}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border border-teal-800/35 bg-slate-900/40 p-3">
@@ -2366,6 +2745,33 @@ export function MapShapeEditor({
                         >
                           <Icon className="h-3.5 w-3.5" aria-hidden />
                           <span className="sr-only">{title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-violet-300/60">
+                      Text rotation (e.g. ±90° for vertical halls)
+                    </p>
+                    <div className="mt-1 grid grid-cols-4 gap-1">
+                      {LABEL_ROTATION_PRESETS.map(({ deg, short }) => (
+                        <button
+                          key={deg}
+                          type="button"
+                          title={`Rotate label text ${short} (SVG clockwise)`}
+                          onClick={() =>
+                            setLabelPlaceDefaults((d) => ({
+                              ...d,
+                              text_rotation_deg: deg,
+                            }))
+                          }
+                          className={`rounded border px-1 py-1 text-center text-[11px] font-medium tabular-nums ${
+                            labelPlaceDefaults.text_rotation_deg === deg
+                              ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                              : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                          }`}
+                        >
+                          {short}
                         </button>
                       ))}
                     </div>
@@ -2670,6 +3076,37 @@ export function MapShapeEditor({
                       </div>
                     </div>
                     <div>
+                      <p className="text-[11px] text-violet-300/60">
+                        Text rotation
+                      </p>
+                      <div className="mt-1 grid grid-cols-4 gap-1">
+                        {LABEL_ROTATION_PRESETS.map(({ deg, short }) => (
+                          <button
+                            key={`${l.id}-rot-${deg}`}
+                            type="button"
+                            title={`Rotate label ${short}`}
+                            onClick={() =>
+                              setEditorMeta((m) => ({
+                                ...m,
+                                location_labels: m.location_labels.map((x) =>
+                                  x.id === l.id
+                                    ? { ...x, text_rotation_deg: deg }
+                                    : x,
+                                ),
+                              }))
+                            }
+                            className={`rounded border px-0.5 py-0.5 text-center text-[10px] font-medium tabular-nums ${
+                              l.text_rotation_deg === deg
+                                ? "border-fuchsia-500/55 bg-fuchsia-950/40 text-white"
+                                : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                            }`}
+                          >
+                            {short}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
                       <label className="text-[11px] text-violet-300/60">
                         Size ({l.size.toFixed(2)}×)
                       </label>
@@ -2912,7 +3349,9 @@ export function MapShapeEditor({
                                   #{idx + 1}
                                 </span>
                                 <span className="font-mono text-xs text-violet-500">
-                                  {sh.points.length} pts
+                                  {isCircleOverlay(sh)
+                                    ? "circle"
+                                    : `${sh.points.length} pts`}
                                 </span>
                               </button>
                               <button

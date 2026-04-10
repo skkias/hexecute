@@ -25,11 +25,19 @@ export type MapOverlayKind =
    */
   | "grade";
 
+/** Circle overlay in viewBox space (`r` in user units). */
+export type MapOverlayCircle = { cx: number; cy: number; r: number };
+
 /** Polygons (`obstacle` | `elevation` | `wall`) or a grade polyline in viewBox space. */
 export interface MapOverlayShape {
   id: string;
   kind: MapOverlayKind;
   points: MapPoint[];
+  /**
+   * When set, the overlay is a circle (polygon kinds render as `<circle>`;
+   * `grade` uses a closed loop sampled from the circle). Ignored if empty points-only polyline.
+   */
+  circle?: MapOverlayCircle | null;
   /**
    * For `grade` only: +1 = higher ground to the left of each segment direction,
    * -1 = higher to the right. Ignored for polygon kinds.
@@ -88,6 +96,11 @@ export interface MapLocationLabel {
   size: number;
   /** Placement of text relative to the point (default matches legacy: to the right). */
   text_anchor: MapLabelTextAnchor;
+  /**
+   * Rotation of the text in degrees, SVG-style (positive = clockwise; 0 = horizontal).
+   * Use ±90 for text along vertical hallways.
+   */
+  text_rotation_deg: number;
 }
 
 export interface MapEditorMeta {
