@@ -1496,8 +1496,9 @@ export function MapShapeEditor({
       view_box: viewBox,
       path_atk: pathAtk,
       path_def: pathDef,
-      extra_paths: sanitizedOverlays,
-      editor_meta: editorMeta,
+      // Ensure Flight/server-action serialization sends plain JSON for overlays.
+      extra_paths: JSON.parse(JSON.stringify(sanitizedOverlays)) as MapOverlayShape[],
+      editor_meta: JSON.parse(JSON.stringify(editorMeta)) as MapEditorMeta,
     });
     setSaving(false);
     if (res.error) setBanner(res.error);

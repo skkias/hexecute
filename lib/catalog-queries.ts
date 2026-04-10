@@ -23,10 +23,11 @@ export async function listMaps(): Promise<GameMap[]> {
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => {
     const r = row as Record<string, unknown>;
+    const extraRaw = r.extra_paths ?? r.extraPaths;
     return {
       ...(row as GameMap),
       image_transform: normalizeMapTransform(r.image_transform),
-      extra_paths: normalizeExtraPaths(r.extra_paths),
+      extra_paths: normalizeExtraPaths(extraRaw),
       editor_meta: normalizeEditorMeta(r.editor_meta),
     };
   });
@@ -42,10 +43,11 @@ export async function getMapById(id: string): Promise<GameMap | null> {
   if (error) throw new Error(error.message);
   if (!data) return null;
   const r = data as Record<string, unknown>;
+  const extraRaw = r.extra_paths ?? r.extraPaths;
   return {
     ...(data as GameMap),
     image_transform: normalizeMapTransform(r.image_transform),
-    extra_paths: normalizeExtraPaths(r.extra_paths),
+    extra_paths: normalizeExtraPaths(extraRaw),
     editor_meta: normalizeEditorMeta(r.editor_meta),
   };
 }

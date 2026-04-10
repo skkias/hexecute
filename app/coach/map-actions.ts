@@ -73,10 +73,25 @@ export async function updateMapAction(
     if (payload.view_box !== undefined) row.view_box = payload.view_box;
     if (payload.path_atk !== undefined) row.path_atk = payload.path_atk;
     if (payload.path_def !== undefined) row.path_def = payload.path_def;
-    if (payload.extra_paths !== undefined) row.extra_paths = payload.extra_paths;
-    if (payload.editor_meta !== undefined) row.editor_meta = payload.editor_meta;
-    const { error } = await supabase.from("maps").update(row).eq("id", id);
+    if (payload.extra_paths !== undefined) {
+      // Plain JSON only (jsonb); avoids non-serializable values from client state.
+      row.extra_paths = JSON.parse(
+        JSON.stringify(payload.extra_paths),
+      ) as unknown;
+    }
+    if (payload.editor_meta !== undefined) {
+      row.editor_meta = JSON.parse(
+        JSON.stringify(payload.editor_meta),
+      ) as unknown;
+    }
+    const { data: updated, error } = await supabase
+      .from("maps")
+      .update(row)
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
     if (error) return { error: error.message };
+    if (!updated) return { error: "Map was not updated (check id and permissions)." };
     revalidatePath("/coach");
     revalidatePath("/coach/maps");
     revalidatePath(`/coach/maps/${id}`);
