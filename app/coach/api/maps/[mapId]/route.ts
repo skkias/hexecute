@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertCoachGate } from "@/lib/coach-gate-server";
+import { isValidUuid } from "@/lib/is-uuid";
 import { persistMapUpdate } from "@/lib/map-persist-server";
 import type { MapUpdatePayload } from "@/types/catalog";
 
@@ -18,6 +19,9 @@ export async function POST(
   }
 
   const { mapId } = await context.params;
+  if (!isValidUuid(mapId)) {
+    return NextResponse.json({ error: "Invalid map id." }, { status: 400 });
+  }
   let payload: MapUpdatePayload;
   try {
     payload = (await req.json()) as MapUpdatePayload;

@@ -3,12 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getMapById } from "@/lib/catalog-queries";
 import { initialOutlineRings } from "@/lib/map-initial-outline";
+import { isValidUuid } from "@/lib/is-uuid";
 import { MapShapeEditor } from "@/components/coach/MapShapeEditor";
 
 type Props = { params: Promise<{ mapId: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { mapId } = await params;
+  if (!isValidUuid(mapId)) {
+    return { title: "Map shape" };
+  }
   const map = await getMapById(mapId);
   return {
     title: map ? `${map.name} · Map shape` : "Map shape",
@@ -17,6 +21,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CoachMapEditPage({ params }: Props) {
   const { mapId } = await params;
+  if (!isValidUuid(mapId)) notFound();
   const map = await getMapById(mapId);
   if (!map) notFound();
 
