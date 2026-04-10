@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import type { Agent, GameMap } from "@/types/catalog";
 import { normalizeMapTransform } from "@/lib/map-transform";
+import { normalizeEditorMeta } from "@/lib/map-editor-meta";
 import { normalizeExtraPaths } from "@/lib/map-extra-paths";
 
 export async function listAgents(): Promise<Agent[]> {
@@ -26,6 +27,7 @@ export async function listMaps(): Promise<GameMap[]> {
       ...(row as GameMap),
       image_transform: normalizeMapTransform(r.image_transform),
       extra_paths: normalizeExtraPaths(r.extra_paths),
+      editor_meta: normalizeEditorMeta(r.editor_meta),
     };
   });
 }
@@ -44,5 +46,6 @@ export async function getMapById(id: string): Promise<GameMap | null> {
     ...(data as GameMap),
     image_transform: normalizeMapTransform(r.image_transform),
     extra_paths: normalizeExtraPaths(r.extra_paths),
+    editor_meta: normalizeEditorMeta(r.editor_meta),
   };
 }

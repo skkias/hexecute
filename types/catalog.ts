@@ -55,5 +55,30 @@ export interface GameMap {
   path_def: string | null;
   /** Obstacles, elevation, walls, and grade lines (JSON in DB). */
   extra_paths: MapOverlayShape[];
+  /**
+   * Reference image toggle, spawn pins, and text labels (attack-side viewBox coords).
+   */
+  editor_meta: MapEditorMeta;
   sort_order: number;
+}
+
+/** Spawn pins and callouts saved with the map (editor + future viewers). */
+export interface MapSpawnMarker {
+  id: string;
+  side: "atk" | "def";
+  x: number;
+  y: number;
+}
+
+export interface MapLocationLabel {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+}
+
+export interface MapEditorMeta {
+  show_reference_image: boolean;
+  spawn_markers: MapSpawnMarker[];
+  location_labels: MapLocationLabel[];
 }

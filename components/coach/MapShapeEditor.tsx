@@ -12,6 +12,7 @@ import {
 import type { CSSProperties } from "react";
 import type {
   GameMap,
+  MapEditorMeta,
   MapImageTransform,
   MapOverlayKind,
   MapOverlayShape,
@@ -25,6 +26,7 @@ import {
   ringsToPathD,
   type MapPoint,
 } from "@/lib/map-path";
+import { normalizeEditorMeta } from "@/lib/map-editor-meta";
 import { normalizeExtraPaths } from "@/lib/map-extra-paths";
 import {
   clampPointsToOutline,
@@ -51,6 +53,7 @@ import {
   FlipVertical2,
   ImagePlus,
   Loader2,
+  MapPin,
   Mountain,
   Move,
   Octagon,
@@ -60,6 +63,7 @@ import {
   Shield,
   Swords,
   Trash2,
+  Type,
   Undo2,
 } from "lucide-react";
 
@@ -94,6 +98,17 @@ type PanDragState = {
   userPerPxX: number;
   userPerPxY: number;
 };
+
+type AnnotationDragState = {
+  pointerId: number;
+  kind: "spawn" | "label";
+  id: string;
+  startSvg: MapPoint;
+  startX: number;
+  startY: number;
+};
+
+type PlaceAnnotationMode = "none" | "spawn-atk" | "spawn-def" | "label";
 
 /** Map canvas panel: grow with layout but cap on huge viewports (e.g. 4K @ 150%). */
 const MAP_VIEWPORT_MIN_W_PX = 280;
@@ -417,6 +432,12 @@ export function MapShapeEditor({
   >(null);
   /** Cyan defense outline is mirrored from attack; can hide for a cleaner view. */
   const [showDefensePreview, setShowDefensePreview] = useState(true);
+  const [editorMeta, setEditorMeta] = useState<MapEditorMeta>(() =>
+    normalizeEditorMeta(initial.editor_meta),
+  );
+  /** Click map to place spawns/labels; not persisted. */
+  const [placeMode, setPlaceMode] = useState<PlaceAnnotationMode>("none");
+  const annotationDragRef = useRef<AnnotationDragState | null>(null);
 
   const clipId = useId().replace(/:/g, "");
   const outlineRingsRef = useRef({ outer: outlineOuter, holes: outlineHoles });
@@ -450,6 +471,9 @@ export function MapShapeEditor({
   const passiveVertexRadius = PASSIVE_VERTEX_SCREEN_PX * svgUserPerPx;
   const vertexStrokeW = VERTEX_STROKE_SCREEN_PX * svgUserPerPx;
   const passiveVertexStrokeW = PASSIVE_STROKE_SCREEN_PX * svgUserPerPx;
+
+  const annMarkerR = useMemo(() => vb.width * 0.014, [vb.width]);
+  const labelFontSize = useMemo(() => vb.width * 0.026, [vb.width]);
 
   const defOuter = useMemo(
     () =>
@@ -817,13 +841,118 @@ export function MapShapeEditor({
     [tool, activeLayer, outlineOuter, outlineHoles, overlays, svgUserPerPx],
   );
 
+  const onSpawnMarkerPointerDown = useCallback(
+    (
+      e: React.PointerEvent,
+      id: string,
+      pos: { x: number; y: number },
+    ) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        setEditorMeta((m) => ({
+          ...m,
+          spawn_markers: m.spawn_markers.filter((s) => s.id !== id),
+        }));
+        return;
+      }
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      const svg = svgRef.current;
+      if (!svg) return;
+      const startSvg = clientToSvg(svg, e.clientX, e.clientY);
+      annotationDragRef.current = {
+        pointerId: e.pointerId,
+        kind: "spawn",
+        id,
+        startSvg,
+        startX: pos.x,
+        startY: pos.y,
+      };
+      (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+    },
+    [],
+  );
+
+  const onLabelMarkerPointerDown = useCallback(
+    (
+      e: React.PointerEvent,
+      id: string,
+      pos: { x: number; y: number },
+    ) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        e.stopPropagation();
+        setEditorMeta((m) => ({
+          ...m,
+          location_labels: m.location_labels.filter((l) => l.id !== id),
+        }));
+        return;
+      }
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      const svg = svgRef.current;
+      if (!svg) return;
+      const startSvg = clientToSvg(svg, e.clientX, e.clientY);
+      annotationDragRef.current = {
+        pointerId: e.pointerId,
+        kind: "label",
+        id,
+        startSvg,
+        startX: pos.x,
+        startY: pos.y,
+      };
+      (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+    },
+    [],
+  );
+
+  const onAnnotationPointerMove = useCallback((e: React.PointerEvent) => {
+    const ad = annotationDragRef.current;
+    if (!ad || e.pointerId !== ad.pointerId) return;
+    e.preventDefault();
+    const svg = svgRef.current;
+    if (!svg) return;
+    const cur = clientToSvg(svg, e.clientX, e.clientY);
+    const dx = cur.x - ad.startSvg.x;
+    const dy = cur.y - ad.startSvg.y;
+    const nx = ad.startX + dx;
+    const ny = ad.startY + dy;
+    if (ad.kind === "spawn") {
+      setEditorMeta((m) => ({
+        ...m,
+        spawn_markers: m.spawn_markers.map((s) =>
+          s.id === ad.id ? { ...s, x: nx, y: ny } : s,
+        ),
+      }));
+    } else {
+      setEditorMeta((m) => ({
+        ...m,
+        location_labels: m.location_labels.map((l) =>
+          l.id === ad.id ? { ...l, x: nx, y: ny } : l,
+        ),
+      }));
+    }
+  }, []);
+
+  const onAnnotationPointerUp = useCallback((e: React.PointerEvent) => {
+    const ad = annotationDragRef.current;
+    if (!ad || e.pointerId !== ad.pointerId) return;
+    annotationDragRef.current = null;
+    try {
+      (e.currentTarget as SVGElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* already released */
+    }
+  }, []);
+
   const onSvgPointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       if (e.button === 2) {
         e.preventDefault();
         if (!viewport) return;
         const t = e.target as Element;
-        if (t.tagName === "circle") return;
+        if (t.tagName === "circle" && !t.getAttribute("data-map-ann")) return;
         const svg = svgRef.current;
         if (!svg) return;
         const canvas = vbRef.current;
@@ -850,7 +979,47 @@ export function MapShapeEditor({
       }
       if (e.button !== 0) return;
       const t = e.target as Element;
-      if (t.tagName === "circle") return;
+      if (placeMode !== "none") {
+        if (t.closest?.("[data-map-ann]")) return;
+        if (t.tagName === "circle" && !t.getAttribute("data-map-ann")) return;
+        const svg = svgRef.current;
+        if (!svg) return;
+        const p = clientToSvg(svg, e.clientX, e.clientY);
+        if (placeMode === "spawn-atk") {
+          setEditorMeta((m) => ({
+            ...m,
+            spawn_markers: [
+              ...m.spawn_markers,
+              { id: newShapeId(), side: "atk", x: p.x, y: p.y },
+            ],
+          }));
+          setBanner(null);
+          return;
+        }
+        if (placeMode === "spawn-def") {
+          setEditorMeta((m) => ({
+            ...m,
+            spawn_markers: [
+              ...m.spawn_markers,
+              { id: newShapeId(), side: "def", x: p.x, y: p.y },
+            ],
+          }));
+          setBanner(null);
+          return;
+        }
+        if (placeMode === "label") {
+          setEditorMeta((m) => ({
+            ...m,
+            location_labels: [
+              ...m.location_labels,
+              { id: newShapeId(), x: p.x, y: p.y, text: "Label" },
+            ],
+          }));
+          setBanner(null);
+          return;
+        }
+      }
+      if (t.tagName === "circle" && !t.getAttribute("data-map-ann")) return;
       if (tool === "edit") {
         if (tryInsertPointOnEdge(e.clientX, e.clientY)) return;
         setSelection(null);
@@ -862,7 +1031,7 @@ export function MapShapeEditor({
       const p = clientToSvg(svg, e.clientX, e.clientY);
       addPoint(p);
     },
-    [tool, addPoint, viewport, tryInsertPointOnEdge],
+    [tool, addPoint, viewport, tryInsertPointOnEdge, placeMode],
   );
 
   const onSvgPointerMove = useCallback(
@@ -1227,6 +1396,21 @@ export function MapShapeEditor({
         ),
       })),
     );
+    setEditorMeta((em) => {
+      const flip = (p: MapPoint) =>
+        flipPointsOverHorizontalMidline(rect, [p])[0] ?? p;
+      return {
+        ...em,
+        spawn_markers: em.spawn_markers.map((s) => {
+          const q = flip({ x: s.x, y: s.y });
+          return { ...s, x: q.x, y: q.y };
+        }),
+        location_labels: em.location_labels.map((l) => {
+          const q = flip({ x: l.x, y: l.y });
+          return { ...l, x: q.x, y: q.y };
+        }),
+      };
+    });
   }
 
   function addOutlineHole() {
@@ -1284,6 +1468,7 @@ export function MapShapeEditor({
       path_atk: pathAtk,
       path_def: pathDef,
       extra_paths: sanitizedOverlays,
+      editor_meta: editorMeta,
     });
     setSaving(false);
     if (res.error) setBanner(res.error);
@@ -1316,10 +1501,16 @@ export function MapShapeEditor({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-      <div className="flex shrink-0 flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-white">{initial.name}</h2>
-          <p className="mt-1 text-sm text-violet-200/60">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+        <details
+          open
+          className="min-w-0 flex-1 overflow-hidden rounded-lg border border-violet-800/35 bg-slate-950/40 [&[open]>summary_.chevron-map-h]:rotate-90"
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-left [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="chevron-map-h h-4 w-4 shrink-0 text-violet-400 transition-transform" />
+            <h2 className="text-xl font-semibold text-white">{initial.name}</h2>
+          </summary>
+          <p className="border-t border-violet-800/25 px-3 py-3 text-sm text-violet-200/60">
             The cyan defense shape mirrors the purple attack outline. Add holes
             to cut out areas inside the outline. Overlays (obstacles, elevation,
             walls, grade lines) sit in the playable ring (not in holes); they stay
@@ -1327,12 +1518,12 @@ export function MapShapeEditor({
             multi-select, and click passive overlay vertices on the canvas to
             select their layer.
           </p>
-        </div>
+        </details>
         <button
           type="button"
           onClick={() => void handleSave()}
           disabled={saving}
-          className="btn-primary inline-flex items-center gap-2"
+          className="btn-primary hidden shrink-0 items-center gap-2 lg:inline-flex"
         >
           {saving ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -1422,7 +1613,46 @@ export function MapShapeEditor({
                 Reset zoom
               </button>
             )}
+            <button
+              type="button"
+              disabled={!refUrl}
+              onClick={() =>
+                setEditorMeta((m) => ({
+                  ...m,
+                  show_reference_image: !m.show_reference_image,
+                }))
+              }
+              className="btn-secondary inline-flex items-center gap-1 px-2 py-1 disabled:opacity-40"
+              title={
+                !refUrl
+                  ? "Upload a reference image first"
+                  : editorMeta.show_reference_image
+                    ? "Hide reference image (vectors stay visible)"
+                    : "Show reference image"
+              }
+            >
+              {editorMeta.show_reference_image ? (
+                <Eye className="h-3.5 w-3.5" />
+              ) : (
+                <EyeOff className="h-3.5 w-3.5" />
+              )}
+              Reference art
+            </button>
           </div>
+
+          {placeMode !== "none" && (
+            <p
+              className="shrink-0 rounded-lg border border-amber-700/35 bg-amber-950/25 px-3 py-2 text-xs text-amber-100/90"
+              role="status"
+            >
+              {placeMode === "spawn-atk" &&
+                "Click the map to place an attacker spawn marker. Drag a marker to move it; right-click to remove."}
+              {placeMode === "spawn-def" &&
+                "Click the map to place a defender spawn marker. Drag to move; right-click to remove."}
+              {placeMode === "label" &&
+                "Click the map to add a location label. Edit text in the sidebar; drag the dot to move; right-click to remove."}
+            </p>
+          )}
 
           <div
             className="box-border mx-auto flex w-full max-w-[min(100%,var(--map-vp-max-w))] flex-1 overflow-auto rounded-xl border border-violet-500/25 bg-black/40 min-h-[var(--map-vp-min-h)] min-w-[var(--map-vp-min-w)] max-h-[min(100%,min(var(--map-vp-max-dvh),var(--map-vp-max-h)))]"
@@ -1458,7 +1688,7 @@ export function MapShapeEditor({
               }}
               onContextMenu={(e) => e.preventDefault()}
             >
-              {refUrl ? (
+              {refUrl && editorMeta.show_reference_image ? (
                 <image
                   href={refUrl}
                   x={imageLayout.x}
@@ -1467,7 +1697,7 @@ export function MapShapeEditor({
                   height={imageLayout.h}
                   preserveAspectRatio="none"
                 />
-              ) : (
+              ) : !refUrl ? (
                 <text
                   x={vb.width / 2}
                   y={vb.height / 2}
@@ -1476,7 +1706,7 @@ export function MapShapeEditor({
                 >
                   Paste or upload a map image
                 </text>
-              )}
+              ) : null}
 
               {showDefensePreview && outlineDefD && (
                 <path
@@ -1713,6 +1943,76 @@ export function MapShapeEditor({
                     );
                   });
                 })()}
+
+              <g style={{ pointerEvents: "auto" }}>
+                {editorMeta.spawn_markers.map((s) => {
+                  const atk = s.side === "atk";
+                  const fill = atk ? "rgb(196,181,253)" : "rgb(125,211,252)";
+                  const stroke = atk ? "rgb(250,250,250)" : "rgb(224,242,254)";
+                  return (
+                    <circle
+                      key={`spawn-${s.id}`}
+                      data-map-ann="spawn"
+                      cx={s.x}
+                      cy={s.y}
+                      r={annMarkerR}
+                      fill={fill}
+                      fillOpacity={0.95}
+                      stroke={stroke}
+                      strokeWidth={vertexStrokeW * 0.85}
+                      style={{ cursor: "grab" }}
+                      onPointerDown={(e) =>
+                        onSpawnMarkerPointerDown(e, s.id, { x: s.x, y: s.y })
+                      }
+                      onPointerMove={onAnnotationPointerMove}
+                      onPointerUp={onAnnotationPointerUp}
+                      onPointerCancel={onAnnotationPointerUp}
+                      onLostPointerCapture={() => {
+                        annotationDragRef.current = null;
+                      }}
+                    />
+                  );
+                })}
+                {editorMeta.location_labels.map((l) => (
+                  <g key={`label-${l.id}`}>
+                    <circle
+                      data-map-ann="label"
+                      cx={l.x}
+                      cy={l.y}
+                      r={annMarkerR * 0.55}
+                      fill="rgba(250,250,250,0.96)"
+                      stroke="rgb(167,139,250)"
+                      strokeWidth={vertexStrokeW * 0.75}
+                      style={{ cursor: "grab" }}
+                      onPointerDown={(e) =>
+                        onLabelMarkerPointerDown(e, l.id, { x: l.x, y: l.y })
+                      }
+                      onPointerMove={onAnnotationPointerMove}
+                      onPointerUp={onAnnotationPointerUp}
+                      onPointerCancel={onAnnotationPointerUp}
+                      onLostPointerCapture={() => {
+                        annotationDragRef.current = null;
+                      }}
+                    />
+                    <text
+                      x={l.x + annMarkerR * 1.2}
+                      y={l.y + labelFontSize * 0.35}
+                      fill="rgb(250,250,250)"
+                      stroke="rgb(15,15,20)"
+                      strokeWidth={labelFontSize * 0.07}
+                      paintOrder="stroke fill"
+                      style={{
+                        fontSize: labelFontSize,
+                        fontFamily: "system-ui, sans-serif",
+                        fontWeight: 600,
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {l.text}
+                    </text>
+                  </g>
+                ))}
+              </g>
             </svg>
           </div>
         </div>
@@ -1720,6 +2020,22 @@ export function MapShapeEditor({
         <aside
           className="flex min-h-0 flex-col space-y-4 overflow-y-auto overscroll-y-contain rounded-xl border border-violet-500/20 bg-slate-950/50 p-4 [scrollbar-gutter:stable] lg:h-full lg:max-h-full lg:min-h-0"
         >
+          <div className="lg:hidden">
+            <button
+              type="button"
+              onClick={() => void handleSave()}
+              disabled={saving}
+              className="btn-primary inline-flex w-full items-center justify-center gap-2"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Save map
+            </button>
+          </div>
+
           <div>
             <span className="label">Tool</span>
             <div className="mt-2 flex rounded-lg border border-violet-800/50 p-0.5">
@@ -1751,6 +2067,168 @@ export function MapShapeEditor({
                 Edit
               </button>
             </div>
+          </div>
+
+          <div className="rounded-lg border border-teal-800/35 bg-slate-900/40 p-3">
+            <span className="label">Map annotations</span>
+            <p className="mt-1 text-xs text-violet-300/55">
+              Spawns and callouts are saved with the map. Hide reference art while tracing if it gets in the way.
+            </p>
+            <label className="mt-3 flex cursor-pointer items-center gap-2 text-sm text-violet-200/90">
+              <input
+                type="checkbox"
+                className="rounded border-violet-600"
+                checked={editorMeta.show_reference_image}
+                disabled={!refUrl}
+                onChange={(e) =>
+                  setEditorMeta((m) => ({
+                    ...m,
+                    show_reference_image: e.target.checked,
+                  }))
+                }
+              />
+              Show reference image
+            </label>
+            <span className="mt-3 block text-xs font-medium text-violet-200/80">
+              Place on map
+            </span>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPlaceMode("none")}
+                className={`rounded-md border px-2 py-1.5 text-xs font-medium ${
+                  placeMode === "none"
+                    ? "border-teal-500/60 bg-teal-950/50 text-white"
+                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                }`}
+              >
+                Off
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setPlaceMode((m) => (m === "spawn-atk" ? "none" : "spawn-atk"))
+                }
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                  placeMode === "spawn-atk"
+                    ? "border-violet-500/60 bg-violet-950/50 text-white"
+                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                }`}
+              >
+                <Swords className="h-3.5 w-3.5" />
+                Atk spawn
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setPlaceMode((m) => (m === "spawn-def" ? "none" : "spawn-def"))
+                }
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                  placeMode === "spawn-def"
+                    ? "border-sky-500/55 bg-sky-950/40 text-white"
+                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                }`}
+              >
+                <Shield className="h-3.5 w-3.5" />
+                Def spawn
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setPlaceMode((m) => (m === "label" ? "none" : "label"))
+                }
+                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium ${
+                  placeMode === "label"
+                    ? "border-fuchsia-500/50 bg-fuchsia-950/35 text-white"
+                    : "border-violet-800/45 text-violet-200/75 hover:bg-violet-950/35"
+                }`}
+              >
+                <Type className="h-3.5 w-3.5" />
+                Label
+              </button>
+            </div>
+            {editorMeta.spawn_markers.length > 0 && (
+              <ul className="mt-3 space-y-1 border-t border-teal-800/25 pt-2 text-xs text-violet-200/85">
+                {editorMeta.spawn_markers.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between gap-2 rounded border border-violet-800/30 px-2 py-1"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      {s.side === "atk" ? (
+                        <Swords className="h-3.5 w-3.5 text-violet-300" />
+                      ) : (
+                        <Shield className="h-3.5 w-3.5 text-sky-300" />
+                      )}
+                      {s.side === "atk" ? "Attack" : "Defend"}
+                    </span>
+                    <button
+                      type="button"
+                      title="Remove spawn"
+                      onClick={() =>
+                        setEditorMeta((m) => ({
+                          ...m,
+                          spawn_markers: m.spawn_markers.filter(
+                            (x) => x.id !== s.id,
+                          ),
+                        }))
+                      }
+                      className="shrink-0 rounded p-1 text-fuchsia-300 hover:bg-fuchsia-950/40"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {editorMeta.location_labels.length > 0 && (
+              <div className="mt-3 space-y-2 border-t border-teal-800/25 pt-2">
+                <span className="text-xs font-medium text-violet-200/80">
+                  Location labels
+                </span>
+                {editorMeta.location_labels.map((l) => (
+                  <div
+                    key={l.id}
+                    className="flex flex-col gap-1 rounded border border-fuchsia-900/35 bg-slate-950/40 p-2"
+                  >
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-fuchsia-300/90" />
+                      <input
+                        type="text"
+                        value={l.text}
+                        onChange={(e) =>
+                          setEditorMeta((m) => ({
+                            ...m,
+                            location_labels: m.location_labels.map((x) =>
+                              x.id === l.id
+                                ? { ...x, text: e.target.value }
+                                : x,
+                            ),
+                          }))
+                        }
+                        className="input-field min-w-0 flex-1 py-1 text-xs"
+                        aria-label="Label text"
+                      />
+                      <button
+                        type="button"
+                        title="Remove label"
+                        onClick={() =>
+                          setEditorMeta((m) => ({
+                            ...m,
+                            location_labels: m.location_labels.filter(
+                              (x) => x.id !== l.id,
+                            ),
+                          }))
+                        }
+                        className="shrink-0 rounded p-1 text-fuchsia-300 hover:bg-fuchsia-950/40"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>

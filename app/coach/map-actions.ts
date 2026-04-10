@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { assertCoachGate } from "@/lib/coach-gate-server";
 import { createServiceSupabaseClient } from "@/lib/supabase-service";
-import type { MapImageTransform, MapOverlayShape } from "@/types/catalog";
+import type {
+  MapEditorMeta,
+  MapImageTransform,
+  MapOverlayShape,
+} from "@/types/catalog";
 
 function slugify(raw: string): string {
   return raw
@@ -50,6 +54,7 @@ export type MapUpdatePayload = {
   path_atk?: string | null;
   path_def?: string | null;
   extra_paths?: MapOverlayShape[];
+  editor_meta?: MapEditorMeta;
 };
 
 export async function updateMapAction(
@@ -69,6 +74,7 @@ export async function updateMapAction(
     if (payload.path_atk !== undefined) row.path_atk = payload.path_atk;
     if (payload.path_def !== undefined) row.path_def = payload.path_def;
     if (payload.extra_paths !== undefined) row.extra_paths = payload.extra_paths;
+    if (payload.editor_meta !== undefined) row.editor_meta = payload.editor_meta;
     const { error } = await supabase.from("maps").update(row).eq("id", id);
     if (error) return { error: error.message };
     revalidatePath("/coach");
