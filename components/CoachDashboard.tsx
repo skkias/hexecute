@@ -12,17 +12,14 @@ import type { Agent, GameMap } from "@/types/catalog";
 import {
   Folder,
   Loader2,
-  Lock,
-  Map as MapIcon,
   Plus,
+  RefreshCw,
   Trash2,
   Upload,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { StratStageEditor } from "@/components/StratStageEditor";
 import { defaultStratStages } from "@/lib/strat-stages";
-import { lockCoach } from "@/app/coach/actions";
 import {
   createStratAction,
   deleteStratAction,
@@ -426,65 +423,33 @@ export function CoachDashboard({
   );
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-violet-900/35 bg-slate-950/40 px-4 py-3">
-        <p className="text-sm text-violet-200/65">
-          Signed in with the{" "}
-          <span className="text-slate-100">coach password</span>. Changes apply
-          to the public page after save.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/coach/maps"
-            className="btn-secondary inline-flex items-center gap-2"
-          >
-            <MapIcon className="h-4 w-4" />
-            Map shapes
-          </Link>
-          <Link
-            href="/coach/agents"
-            className="btn-secondary inline-flex items-center gap-2"
-          >
-            <Users className="h-4 w-4" />
-            Agent abilities
-          </Link>
-          <button
-            type="button"
-            onClick={() => void loadStrats()}
-            disabled={listLoading}
-            className="btn-secondary inline-flex items-center gap-2"
-          >
-            {listLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : null}
-            Refresh
-          </button>
-          <form action={lockCoach}>
-            <button
-              type="submit"
-              className="btn-secondary inline-flex items-center gap-2"
-            >
-              <Lock className="h-4 w-4" />
-              Lock coach
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <aside className="flex max-h-[42vh] w-full shrink-0 flex-col border-violet-900/40 bg-slate-950/65 md:max-h-none md:h-[min(100dvh,1200px)] md:w-72 md:border-r">
-          <div className="border-b border-violet-900/35 p-3">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
+        <aside className="flex max-h-[42vh] w-full shrink-0 flex-col border-violet-900/40 bg-slate-950/65 md:max-h-none md:h-full md:min-h-0 md:w-72 md:border-r">
+          <div className="flex gap-2 border-b border-violet-900/35 p-3">
             <button
               type="button"
               onClick={selectNewStrat}
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
+              className={`inline-flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition ${
                 editingId === null
                   ? "bg-violet-500 text-white shadow-lg shadow-violet-600/25 ring-2 ring-violet-400/40"
                   : "btn-primary"
               }`}
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-4 w-4 shrink-0" />
               New strat
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadStrats()}
+              disabled={listLoading}
+              title="Refresh strat list"
+              aria-label="Refresh strat list"
+              className="btn-secondary inline-flex shrink-0 items-center justify-center p-2.5"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${listLoading ? "animate-spin" : ""}`}
+              />
             </button>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2 [scrollbar-gutter:stable]">

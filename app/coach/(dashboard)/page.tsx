@@ -21,25 +21,12 @@ export default async function CoachPage() {
   }
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-violet-500/15 px-4 py-8">
-        <div className="mx-auto max-w-6xl">
-          <h1 className="text-2xl font-semibold text-white drop-shadow-[0_0_20px_rgba(139,92,246,0.2)]">
-            Coach dashboard
-          </h1>
-          <p className="mt-2 text-sm text-violet-200/65">
-            Unlock with the coach password to add strats, upload images, and manage
-            your library. Browse stays read-only for everyone.
-          </p>
-        </div>
-      </div>
-      <div className="flex min-h-0 w-full flex-1 px-2 pb-8 pt-4 md:px-4">
-        <CoachDashboard
-          initialAgents={agents}
-          initialMaps={maps}
-          catalogError={catalogError}
-        />
-      </div>
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-3 pt-2 md:px-4 md:pb-4">
+      <CoachDashboard
+        initialAgents={agents}
+        initialMaps={maps}
+        catalogError={catalogError}
+      />
     </main>
   );
 }

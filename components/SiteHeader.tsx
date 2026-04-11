@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Lock, Map as MapIcon, Users } from "lucide-react";
+import { lockCoach } from "@/app/coach/actions";
 
 const coachTabs = [
   { href: "/coach", label: "Strats", match: (p: string) => p === "/coach" },
@@ -27,6 +29,7 @@ export function SiteHeader() {
   const showCoachTabs =
     pathname.startsWith("/coach") && !pathname.startsWith("/coach/login");
   const showMapBack = isCoachMapEditPath(pathname);
+  const showCoachStratsBar = pathname === "/coach";
 
   return (
     <header className="sticky top-0 z-40 shrink-0 border-b border-violet-500/15 bg-slate-950/75 backdrop-blur-md">
@@ -109,6 +112,49 @@ export function SiteHeader() {
           )}
         </div>
       </div>
+
+      {showCoachStratsBar && (
+        <div className="border-t border-violet-500/10 bg-slate-950/80 px-4 py-2 sm:px-6">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-[1_1_12rem]">
+              <p className="text-sm font-semibold leading-tight text-white">
+                Coach dashboard
+              </p>
+              <p className="line-clamp-2 text-[11px] leading-snug text-violet-300/75 sm:line-clamp-1 sm:text-xs">
+                Password unlock · edits publish to Browse after save.
+              </p>
+            </div>
+            <nav
+              className="ml-auto flex flex-wrap items-center gap-2"
+              aria-label="Coach quick actions"
+            >
+              <Link
+                href="/coach/maps"
+                className="btn-secondary inline-flex items-center gap-1.5 py-1.5 text-xs sm:text-sm"
+              >
+                <MapIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Map shapes
+              </Link>
+              <Link
+                href="/coach/agents"
+                className="btn-secondary inline-flex items-center gap-1.5 py-1.5 text-xs sm:text-sm"
+              >
+                <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                Agents
+              </Link>
+              <form action={lockCoach}>
+                <button
+                  type="submit"
+                  className="btn-secondary inline-flex items-center gap-1.5 py-1.5 text-xs sm:text-sm"
+                >
+                  <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  Lock
+                </button>
+              </form>
+            </nav>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
