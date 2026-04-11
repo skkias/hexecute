@@ -509,7 +509,7 @@ export function CoachDashboard({
         </aside>
 
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="mx-auto max-w-4xl space-y-6 p-4 pb-16 md:p-8">
+          <div className="mx-auto max-w-7xl space-y-6 p-4 pb-16 md:p-8">
       {catalogError && (
         <p
           className="rounded-lg border border-fuchsia-900/50 bg-fuchsia-950/30 px-4 py-3 text-sm text-fuchsia-200"
@@ -547,9 +547,11 @@ export function CoachDashboard({
         ) : null}
         <form
           onSubmit={(e) => void handleSubmit(e)}
-          className="mt-6 space-y-4"
+          className="mt-6 flex flex-col gap-6"
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-8">
+            <div className="min-w-0 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="label" htmlFor="title">
                 Title
@@ -739,9 +741,9 @@ export function CoachDashboard({
                 placeholder="default, pistol, …"
               />
             </div>
-          </div>
+              </div>
 
-          <div className="space-y-3">
+              <div className="space-y-3">
             <div>
               <span className="label">Images (URL, upload, or paste)</span>
               <p className="mt-1 text-xs text-violet-400/50">
@@ -840,34 +842,52 @@ export function CoachDashboard({
               <Plus className="h-4 w-4" />
               Add image row
             </button>
+              </div>
+            </div>
+
+            <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[min(calc(100dvh-5rem),1100px)] lg:overflow-y-auto lg:overscroll-contain lg:rounded-xl lg:border lg:border-violet-800/35 lg:bg-slate-950/35 lg:p-4">
+              {selectedStratMap ? (
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-white">
+                      Strat map & stages
+                    </h3>
+                    <p className="mt-1 text-xs text-violet-400/50">
+                      Timeline and pins: place comp agents and Q/E/C/X on the map.
+                      Full vector editing lives under{" "}
+                      <Link
+                        href="/coach/maps"
+                        className="text-violet-300 underline"
+                      >
+                        Map shapes
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                  <StratStageEditor
+                    gameMap={selectedStratMap}
+                    side={form.side}
+                    compSlugs={form.agentSlots}
+                    agentsCatalog={initialAgents}
+                    stages={form.stratStages}
+                    onStagesChange={(next) =>
+                      setForm((f) => ({ ...f, stratStages: next }))
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-violet-800/45 bg-slate-950/40 px-4 py-10 text-center">
+                  <p className="text-sm text-violet-300/75">
+                    Select a <strong className="text-violet-200">map</strong> in
+                    the form to open the strat timeline and place agents on the
+                    layout.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
-          {selectedStratMap ? (
-            <div className="space-y-3 border-t border-violet-900/40 pt-6">
-              <div>
-                <h3 className="text-sm font-semibold text-white">
-                  Strat map editor
-                </h3>
-                <p className="mt-1 text-xs text-violet-400/50">
-                  Multi-stage timeline: place comp agents and Q/E/C/X abilities on
-                  the map. Territory outline and cutouts are not shown; edit
-                  vectors on Map shapes.
-                </p>
-              </div>
-              <StratStageEditor
-                gameMap={selectedStratMap}
-                side={form.side}
-                compSlugs={form.agentSlots}
-                agentsCatalog={initialAgents}
-                stages={form.stratStages}
-                onStagesChange={(next) =>
-                  setForm((f) => ({ ...f, stratStages: next }))
-                }
-              />
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap gap-3 pt-2">
+          <div className="flex flex-wrap gap-3 border-t border-violet-900/35 pt-4">
             <button
               type="submit"
               disabled={saving || !catalogReady}
