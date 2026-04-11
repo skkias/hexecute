@@ -28,6 +28,8 @@ import {
   abilitySlotStyle,
   roleAccent,
 } from "@/lib/strat-stage-pin-styles";
+import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
+import { StratAbilityBlueprintSvg } from "@/components/StratAbilityBlueprintSvg";
 import type { MapPoint, ViewBoxRect } from "@/lib/map-path";
 import {
   stratStagePinForDisplay,
@@ -433,10 +435,10 @@ export function StratStageEditor({
         const st = abilitySlotStyle(ab.slot);
         const sel = selectedId === ab.id;
         const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });
+        const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
         return (
           <g
             key={ab.id}
-            transform={`translate(${pos.x},${pos.y})`}
             onPointerDown={(e) => {
               e.stopPropagation();
               if (placementMode) return;
@@ -456,25 +458,37 @@ export function StratStageEditor({
             }}
             style={{ cursor: placementMode ? "default" : "grab" }}
           >
-            <circle
-              r={abilityR}
-              fill={st.fill}
-              stroke={sel ? "#fae8ff" : st.stroke}
-              strokeWidth={vbWidth * 0.0024 * (sel ? 2.2 : 1)}
-            />
-            <text
-              y={fontAbility * 0.35}
-              textAnchor="middle"
-              fill="rgba(15,23,42,0.92)"
-              style={{
-                fontSize: fontAbility,
-                fontFamily: "system-ui, sans-serif",
-                fontWeight: 800,
-                pointerEvents: "none",
-              }}
-            >
-              {abilitySlotLabel(ab.slot)}
-            </text>
+            {bp ? (
+              <StratAbilityBlueprintSvg
+                blueprint={bp}
+                mapX={pos.x}
+                mapY={pos.y}
+                vbWidth={vbWidth}
+                selected={sel}
+              />
+            ) : (
+              <g transform={`translate(${pos.x},${pos.y})`}>
+                <circle
+                  r={abilityR}
+                  fill={st.fill}
+                  stroke={sel ? "#fae8ff" : st.stroke}
+                  strokeWidth={vbWidth * 0.0024 * (sel ? 2.2 : 1)}
+                />
+                <text
+                  y={fontAbility * 0.35}
+                  textAnchor="middle"
+                  fill="rgba(15,23,42,0.92)"
+                  style={{
+                    fontSize: fontAbility,
+                    fontFamily: "system-ui, sans-serif",
+                    fontWeight: 800,
+                    pointerEvents: "none",
+                  }}
+                >
+                  {abilitySlotLabel(ab.slot)}
+                </text>
+              </g>
+            )}
           </g>
         );
       })}

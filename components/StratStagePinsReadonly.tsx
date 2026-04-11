@@ -12,6 +12,8 @@ import {
   abilitySlotStyle,
   roleAccent,
 } from "@/lib/strat-stage-pin-styles";
+import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
+import { StratAbilityBlueprintSvg } from "@/components/StratAbilityBlueprintSvg";
 
 export function StratStagePinsReadonly({
   vb,
@@ -89,26 +91,39 @@ export function StratStagePinsReadonly({
       {stage.abilities.map((ab) => {
         const st = abilitySlotStyle(ab.slot);
         const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });
+        const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
         return (
-          <g key={ab.id} transform={`translate(${pos.x},${pos.y})`}>
-            <circle
-              r={abilityR}
-              fill={st.fill}
-              stroke={st.stroke}
-              strokeWidth={vbWidth * 0.0024}
-            />
-            <text
-              y={fontAbility * 0.35}
-              textAnchor="middle"
-              fill="rgba(15,23,42,0.92)"
-              style={{
-                fontSize: fontAbility,
-                fontFamily: "system-ui, sans-serif",
-                fontWeight: 800,
-              }}
-            >
-              {abilitySlotLabel(ab.slot)}
-            </text>
+          <g key={ab.id}>
+            {bp ? (
+              <StratAbilityBlueprintSvg
+                blueprint={bp}
+                mapX={pos.x}
+                mapY={pos.y}
+                vbWidth={vbWidth}
+                pointerEvents="none"
+              />
+            ) : (
+              <g transform={`translate(${pos.x},${pos.y})`}>
+                <circle
+                  r={abilityR}
+                  fill={st.fill}
+                  stroke={st.stroke}
+                  strokeWidth={vbWidth * 0.0024}
+                />
+                <text
+                  y={fontAbility * 0.35}
+                  textAnchor="middle"
+                  fill="rgba(15,23,42,0.92)"
+                  style={{
+                    fontSize: fontAbility,
+                    fontFamily: "system-ui, sans-serif",
+                    fontWeight: 800,
+                  }}
+                >
+                  {abilitySlotLabel(ab.slot)}
+                </text>
+              </g>
+            )}
           </g>
         );
       })}
