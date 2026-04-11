@@ -27,7 +27,7 @@ export default async function CoachAgentEditorPage({ params }: Props) {
 
   if (loadError) {
     return (
-      <main className="flex flex-1 flex-col px-4 py-8">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-8">
         <p className="rounded-lg border border-fuchsia-900/50 bg-fuchsia-950/30 px-4 py-3 text-sm text-fuchsia-200">
           {loadError}
         </p>
@@ -38,8 +38,8 @@ export default async function CoachAgentEditorPage({ params }: Props) {
   if (!agent) notFound();
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-violet-500/15 px-4 py-6">
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-violet-500/15 px-4 py-5 md:py-6">
         <div className="mx-auto max-w-6xl">
           <Link
             href="/coach/agents"
@@ -61,8 +61,10 @@ export default async function CoachAgentEditorPage({ params }: Props) {
           </p>
         </div>
       </div>
-      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-        <AgentAbilityEditor agent={agent} />
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 md:py-8">
+        <div className="mx-auto w-full max-w-6xl">
+          <AgentAbilityEditor agent={agent} />
+        </div>
       </div>
     </main>
   );

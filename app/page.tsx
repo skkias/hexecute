@@ -11,7 +11,7 @@ export default async function Home() {
 
   if (!url || !key) {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-20">
+      <main className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-20">
         <p className="max-w-md text-center text-violet-200/70">
           Add{" "}
           <code className="rounded border border-violet-500/20 bg-slate-950/60 px-1.5 py-0.5 text-sm text-violet-200">
@@ -65,7 +65,7 @@ export default async function Home() {
 
   if (errorMessage) {
     return (
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-20">
+      <main className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-20">
         <p className="max-w-lg text-center text-fuchsia-400" role="alert">
           {errorMessage}
         </p>
@@ -74,8 +74,8 @@ export default async function Home() {
   }
 
   return (
-    <main className="flex flex-1 flex-col">
-      <div className="border-b border-violet-500/15 bg-gradient-to-b from-violet-950/40 via-indigo-950/20 to-transparent px-4 py-10">
+    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+      <div className="shrink-0 border-b border-violet-500/15 bg-gradient-to-b from-violet-950/40 via-indigo-950/20 to-transparent px-4 py-10">
         <div className="mx-auto max-w-6xl">
           <h1 className="text-3xl font-semibold tracking-tight text-white drop-shadow-[0_0_24px_rgba(139,92,246,0.25)]">
             Team strats
