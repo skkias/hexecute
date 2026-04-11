@@ -1,13 +1,13 @@
 import {
-  flipPointsOverVerticalMidline,
+  flipPointsThroughViewBoxCenter,
   type MapPoint,
   type ViewBoxRect,
 } from "@/lib/map-path";
 import type { StratSide } from "@/types/strat";
 
 /**
- * Stage pins are stored in attack-side viewBox coordinates. Defense view mirrors
- * across the vertical midline (`flipPointsOverVerticalMidline`), matching `stratMapDisplayData`.
+ * Stage pins are stored in attack-side viewBox coordinates. Defense view reflects
+ * through the viewBox center (`flipPointsThroughViewBoxCenter`), matching `stratMapDisplayData`.
  */
 export function stratStagePinForDisplay(
   vb: ViewBoxRect,
@@ -15,7 +15,7 @@ export function stratStagePinForDisplay(
   storedAttack: MapPoint,
 ): MapPoint {
   if (side === "atk") return storedAttack;
-  return flipPointsOverVerticalMidline(vb, [storedAttack])[0]!;
+  return flipPointsThroughViewBoxCenter(vb, [storedAttack])[0]!;
 }
 
 /** Convert a screen coordinate (for the current strat side) to stored attack coords. */
@@ -25,5 +25,5 @@ export function stratStagePinToStoredAttack(
   displayCoords: MapPoint,
 ): MapPoint {
   if (side === "atk") return displayCoords;
-  return flipPointsOverVerticalMidline(vb, [displayCoords])[0]!;
+  return flipPointsThroughViewBoxCenter(vb, [displayCoords])[0]!;
 }

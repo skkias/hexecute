@@ -6,14 +6,14 @@ import type {
 } from "@/types/catalog";
 import type { StratSide } from "@/types/strat";
 import {
-  transformLocationLabelForVerticalMidlineFlip,
+  transformLocationLabelForViewBoxCenterFlip,
 } from "@/lib/map-label-layout";
 import {
   circleToGradeClosedPoints,
   isCircleOverlay,
 } from "@/lib/map-overlay-geometry";
 import {
-  flipPointsOverVerticalMidline,
+  flipPointsThroughViewBoxCenter,
   type ViewBoxRect,
 } from "@/lib/map-path";
 import { normalizeEditorMeta } from "@/lib/map-editor-meta";
@@ -25,10 +25,9 @@ export function viewBoxRectFromMap(map: GameMap): ViewBoxRect {
 }
 
 /**
- * Map data is stored in attack-side viewBox coordinates. For defense strats, mirror
- * across the **vertical** midline (reflection over the y-axis / flip X): B and A swap
- * east–west so B sits on the right, matching common defense callout orientation.
- * Top/bottom (T vs CT) is unchanged for spawns on the vertical centerline.
+ * Map data is stored in attack-side viewBox coordinates. For defense strats, reflect
+ * through the viewBox center (flip over both X and Y — same as editor “Swap sides”):
+ * 180° point symmetry so left/right and top/bottom both swap.
  */
 export function stratMapDisplayData(
   map: GameMap,
@@ -53,9 +52,6 @@ export function stratMapDisplayData(
     };
   }
 
-  const midX = rect.minX + rect.width / 2;
-  const flipX = (x: number) => 2 * midX - x;
-
   const flipOverlay = (s: MapOverlayShape): MapOverlayShape => {
     const gradeSide =
       s.kind === "grade"
@@ -63,7 +59,8 @@ export function stratMapDisplayData(
         : undefined;
     if (isCircleOverlay(s) && s.circle) {
       const c = s.circle;
-      const nc = { cx: flipX(c.cx), cy: c.cy, r: c.r };
+      const q = flipPointsThroughViewBoxCenter(rect, [{ x: c.cx, y: c.cy }])[0]!;
+      const nc = { cx: q.x, cy: q.y, r: c.r };
       if (s.kind === "grade") {
         return {
           ...s,
@@ -75,7 +72,7 @@ export function stratMapDisplayData(
       return { ...s, circle: nc, points: [] };
     }
     if (s.kind === "rope") {
-      const flipped = flipPointsOverVerticalMidline(rect, s.points);
+      const flipped = flipPointsThroughViewBoxCenter(rect, s.points);
       const e0 = flipped[0];
       const e1 = flipped[flipped.length - 1];
       return {
@@ -86,7 +83,7 @@ export function stratMapDisplayData(
     }
     return {
       ...s,
-      points: flipPointsOverVerticalMidline(rect, s.points),
+      points: flipPointsThroughViewBoxCenter(rect, s.points),
       ...(s.kind === "grade" && gradeSide !== undefined
         ? { gradeHighSide: gradeSide }
         : {}),
@@ -96,13 +93,13 @@ export function stratMapDisplayData(
   return {
     vb,
     overlays: extra.map(flipOverlay),
-    spawn_markers: em.spawn_markers.map((s) => ({
-      ...s,
-      x: flipX(s.x),
-    })),
+    spawn_markers: em.spawn_markers.map((s) => {
+      const q = flipPointsThroughViewBoxCenter(rect, [{ x: s.x, y: s.y }])[0]!;
+      return { ...s, x: q.x, y: q.y };
+    }),
     location_labels: em.location_labels.map((l) => ({
       ...l,
-      ...transformLocationLabelForVerticalMidlineFlip(rect, rect.width, l),
+      ...transformLocationLabelForViewBoxCenterFlip(rect, rect.width, l),
     })),
   };
 }

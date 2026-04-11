@@ -1,7 +1,7 @@
 import type { GameMap } from "@/types/catalog";
 import type { StratSide } from "@/types/strat";
 import {
-  flipPointsOverVerticalMidline,
+  flipPointsThroughViewBoxCenter,
   parsePathToRings,
   ringsToPathD,
   type ViewBoxRect,
@@ -27,8 +27,8 @@ export function outlinePathForStratSide(
 
 /**
  * Territory outline for the strat viewer. Attack uses the stored attack outline.
- * Defense uses a **vertical** (y-axis / left↔right) mirror of that outline so it
- * matches `stratMapDisplayData` — not the DB `path_def` top↔bottom mirror.
+ * Defense reflects that outline through the viewBox center (flip X and Y) so it matches
+ * `stratMapDisplayData` — not the raw DB `path_def` alone.
  */
 export function outlinePathForStratDisplay(
   map: GameMap,
@@ -41,7 +41,7 @@ export function outlinePathForStratDisplay(
   if (rings.length === 0) return atkPath;
   const outer0 = rings[0];
   if (!outer0 || outer0.length < 3) return atkPath;
-  const flipped = rings.map((ring) => flipPointsOverVerticalMidline(vb, ring));
+  const flipped = rings.map((ring) => flipPointsThroughViewBoxCenter(vb, ring));
   const outer = flipped[0] ?? [];
   const holes = flipped.slice(1);
   return ringsToPathD(outer, holes);
