@@ -15,6 +15,7 @@ import { StratMapViewer } from "@/components/StratMapViewer";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
 import { clientToSvgPoint } from "@/lib/svg-coords";
 import { createEmptyStratStage } from "@/lib/strat-stages";
+import { StratAgentMapPinSvg } from "@/components/StratAgentMapPinSvg";
 import {
   abbrevAgentName,
   abilitySlotLabel,
@@ -125,9 +126,24 @@ export function StratStageEditor({
     return uniq
       .map((slug) => {
         const a = agentsCatalog.find((x) => x.slug === slug);
-        return a ? { slug, name: a.name, role: a.role } : null;
+        if (!a) return null;
+        const raw = a.portrait_url?.trim();
+        return {
+          slug,
+          name: a.name,
+          role: a.role,
+          portraitUrl:
+            raw?.startsWith("https://") === true ? raw : null,
+        };
       })
-      .filter((x): x is { slug: string; name: string; role: string } => x != null);
+      .filter(
+        (x): x is {
+          slug: string;
+          name: string;
+          role: string;
+          portraitUrl: string | null;
+        } => x != null,
+      );
   }, [compSlugs, agentsCatalog]);
 
   const activeStage: StratStage | undefined = stages[activeStageIndex];
@@ -327,25 +343,16 @@ export function StratStageEditor({
             }}
             style={{ cursor: placementMode ? "default" : "grab" }}
           >
-            <circle
-              r={tokenR}
-              fill={accent.fill}
-              stroke={sel ? "#fae8ff" : accent.stroke}
-              strokeWidth={vbWidth * 0.0028 * (sel ? 2.2 : 1)}
+            <StratAgentMapPinSvg
+              tokenR={tokenR}
+              vbWidth={vbWidth}
+              abbr={abbr}
+              fontAgent={fontAgent}
+              accent={accent}
+              portraitUrl={meta?.portraitUrl}
+              selected={sel}
+              pinId={a.id}
             />
-            <text
-              y={fontAgent * 0.35}
-              textAnchor="middle"
-              fill="rgba(15,23,42,0.92)"
-              style={{
-                fontSize: fontAgent,
-                fontFamily: "system-ui, sans-serif",
-                fontWeight: 800,
-                pointerEvents: "none",
-              }}
-            >
-              {abbr}
-            </text>
           </g>
         );
       })}

@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { Agent } from "@/types/catalog";
 import type { StratStage } from "@/types/strat";
+import { StratAgentMapPinSvg } from "@/components/StratAgentMapPinSvg";
 import {
   abbrevAgentName,
   abilitySlotLabel,
@@ -27,16 +28,30 @@ export function StratStagePinsReadonly({
     return uniq
       .map((slug) => {
         const a = agentsCatalog.find((x) => x.slug === slug);
-        return a ? { slug, name: a.name, role: a.role } : null;
+        if (!a) return null;
+        const raw = a.portrait_url?.trim();
+        return {
+          slug,
+          name: a.name,
+          role: a.role,
+          portraitUrl:
+            raw?.startsWith("https://") === true ? raw : null,
+        };
       })
-      .filter((x): x is { slug: string; name: string; role: string } => x != null);
+      .filter(
+        (x): x is {
+          slug: string;
+          name: string;
+          role: string;
+          portraitUrl: string | null;
+        } => x != null,
+      );
   }, [compSlugs, agentsCatalog]);
 
   const tokenR = vbWidth * 0.018;
   const abilityR = vbWidth * 0.012;
   const fontAgent = Math.max(10, vbWidth * 0.016);
   const fontAbility = Math.max(9, vbWidth * 0.013);
-  const strokeBase = vbWidth * 0.0022;
 
   return (
     <g style={{ pointerEvents: "none" }}>
@@ -50,24 +65,17 @@ export function StratStagePinsReadonly({
           : a.agentSlug.slice(0, 2).toUpperCase();
         return (
           <g key={a.id} transform={`translate(${a.x},${a.y})`}>
-            <circle
-              r={tokenR}
-              fill={accent.fill}
-              stroke={accent.stroke}
-              strokeWidth={vbWidth * 0.0028}
+            <StratAgentMapPinSvg
+              tokenR={tokenR}
+              vbWidth={vbWidth}
+              abbr={abbr}
+              fontAgent={fontAgent}
+              accent={accent}
+              portraitUrl={meta?.portraitUrl}
+              selected={false}
+              pinId={a.id}
+              pointerEventsNoneOnText
             />
-            <text
-              y={fontAgent * 0.35}
-              textAnchor="middle"
-              fill="rgba(15,23,42,0.92)"
-              style={{
-                fontSize: fontAgent,
-                fontFamily: "system-ui, sans-serif",
-                fontWeight: 800,
-              }}
-            >
-              {abbr}
-            </text>
           </g>
         );
       })}
