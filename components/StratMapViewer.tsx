@@ -585,8 +585,9 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
       >
         <svg
           ref={setSvgRef}
+          tabIndex={-1}
           viewBox={vbStr}
-          className={`w-full select-none touch-none ${
+          className={`w-full select-none touch-none outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 ${
             embed ? "block h-full min-h-[min(56dvh,720px)]" : "h-auto"
           } ${rightPanning ? "cursor-grabbing" : "cursor-crosshair"}`}
           style={

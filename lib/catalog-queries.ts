@@ -9,10 +9,17 @@ export async function listAgents(): Promise<Agent[]> {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from("agents")
-    .select("id, slug, name, role, sort_order, portrait_url")
+    .select("id, slug, name, role, sort_order, portrait_url, abilities_blueprint")
     .order("sort_order", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as Agent[];
+  return (data ?? []).map((row) => {
+    const r = row as Record<string, unknown>;
+    const rawBp = r.abilities_blueprint ?? r.abilitiesBlueprint;
+    return {
+      ...(row as Agent),
+      abilities_blueprint: normalizeAgentAbilitiesBlueprint(rawBp),
+    };
+  });
 }
 
 export async function listMaps(): Promise<GameMap[]> {

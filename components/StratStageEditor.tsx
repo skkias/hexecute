@@ -14,7 +14,13 @@ import type {
 import { StratMapViewer } from "@/components/StratMapViewer";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
 import { clientToSvgPoint } from "@/lib/svg-coords";
+import { allowedAbilitySlotsFromBlueprint } from "@/lib/agent-blueprint-ability-slots";
 import { createEmptyStratStage } from "@/lib/strat-stages";
+import {
+  abilityMetaForSlot,
+  fetchValorantAbilityUiBySlug,
+  type ValorantAbilityUiMeta,
+} from "@/lib/valorant-api-abilities";
 import { StratAgentMapPinSvg } from "@/components/StratAgentMapPinSvg";
 import {
   abbrevAgentName,
@@ -107,6 +113,11 @@ export function StratStageEditor({
   } | null>(null);
   /** Left column: stage fields vs token placement controls. */
   const [editorTab, setEditorTab] = useState<"stage" | "tokens">("stage");
+  /** Valorant API ability names/descriptions keyed by agent slug. */
+  const [valorantAbilityUi, setValorantAbilityUi] = useState<
+    Record<string, ValorantAbilityUiMeta[]>
+  >({});
+  const [valorantUiError, setValorantUiError] = useState<string | null>(null);
 
   const didMountRef = useRef(false);
 
@@ -134,6 +145,9 @@ export function StratStageEditor({
           role: a.role,
           portraitUrl:
             raw?.startsWith("https://") === true ? raw : null,
+          allowedAbilitySlots: allowedAbilitySlotsFromBlueprint(
+            a.abilities_blueprint,
+          ),
         };
       })
       .filter(
@@ -142,9 +156,37 @@ export function StratStageEditor({
           name: string;
           role: string;
           portraitUrl: string | null;
+          allowedAbilitySlots: StratPlacedAbility["slot"][];
         } => x != null,
       );
   }, [compSlugs, agentsCatalog]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchValorantAbilityUiBySlug()
+      .then((data) => {
+        if (!cancelled) {
+          setValorantAbilityUi(data);
+          setValorantUiError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setValorantUiError(
+            err instanceof Error ? err.message : "Ability catalog fetch failed",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const focusMapSvg = useCallback(() => {
+    requestAnimationFrame(() => {
+      svgRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
 
   const activeStage: StratStage | undefined = stages[activeStageIndex];
   const safeIndex = Math.min(activeStageIndex, Math.max(0, stages.length - 1));
@@ -204,6 +246,22 @@ export function StratStageEditor({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const t = e.target as HTMLElement | null;
+        if (
+          t &&
+          (t.tagName === "INPUT" ||
+            t.tagName === "TEXTAREA" ||
+            t.tagName === "SELECT" ||
+            t.isContentEditable)
+        ) {
+          return;
+        }
+        e.preventDefault();
+        setSelectedId(null);
+        setPlacementMode(null);
+        return;
+      }
       if (e.key !== "Delete" && e.key !== "Backspace") return;
       const t = e.target as HTMLElement | null;
       if (
@@ -311,7 +369,14 @@ export function StratStageEditor({
         width={vb.width}
         height={vb.height}
         fill="transparent"
-        onPointerDown={onMapBackgroundPointerDown}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          if (placementMode) {
+            onMapBackgroundPointerDown(e);
+            return;
+          }
+          setSelectedId(null);
+        }}
         style={{ cursor: placementMode ? "crosshair" : "default" }}
       />
       {activeStage.agents.map((a) => {
@@ -329,6 +394,7 @@ export function StratStageEditor({
               e.stopPropagation();
               if (placementMode) return;
               setSelectedId(a.id);
+              focusMapSvg();
               const svg = svgRef.current;
               if (svg) {
                 const o = clientToSvgPoint(svg, e.clientX, e.clientY);
@@ -367,6 +433,7 @@ export function StratStageEditor({
               e.stopPropagation();
               if (placementMode) return;
               setSelectedId(ab.id);
+              focusMapSvg();
               const svg = svgRef.current;
               if (svg) {
                 const o = clientToSvgPoint(svg, e.clientX, e.clientY);
@@ -625,62 +692,96 @@ export function StratStageEditor({
                   <>
                     Choose <strong className="text-slate-200">agent name</strong>{" "}
                     or a <strong className="text-slate-200">Q/E/C/X</strong> chip,
-                    then click the map. Drag pins to adjust; select a pin and press
-                    Delete to remove.
+                    then click the map. Drag pins to adjust; select a pin — the map
+                    grabs focus — then Delete or Backspace removes it (Escape
+                    clears selection).{" "}
+                    {
+                      "Ability chips follow each agent's coach blueprint when set."
+                    }
                   </>
                 )}
               </p>
+              {valorantUiError ? (
+                <p className="mt-2 text-[11px] text-amber-200/70">
+                  Could not load Valorant ability names ({valorantUiError}). Slot
+                  letters still work.
+                </p>
+              ) : null}
               {roster.length === 0 ? (
                 <p className="mt-2 text-xs text-amber-200/80">
                   Fill the five agents in the comp (Details tab) to enable tokens.
                 </p>
               ) : (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-3">
                   {roster.map((r) => (
-                    <div key={r.slug} className="flex flex-wrap items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPlacementMode((m) =>
-                            m?.kind === "agent" && m.slug === r.slug
-                              ? null
-                              : { kind: "agent", slug: r.slug },
-                          )
-                        }
-                        className={`rounded-md border px-2 py-1 text-xs font-medium ${
-                          placementMode?.kind === "agent" &&
-                          placementMode.slug === r.slug
-                            ? "border-violet-400 bg-violet-950/60 text-white"
-                            : "border-violet-800/45 bg-slate-950/60 text-violet-200"
-                        }`}
-                      >
-                        {r.name}
-                      </button>
-                      {(["q", "e", "c", "x"] as const).map((slot) => (
+                    <div
+                      key={r.slug}
+                      className="flex max-w-full flex-col gap-1 rounded-lg border border-violet-800/30 bg-slate-950/30 px-2 py-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-1">
                         <button
-                          key={slot}
                           type="button"
-                          title={`Place ${slot.toUpperCase()} for ${r.name}`}
                           onClick={() =>
                             setPlacementMode((m) =>
-                              m?.kind === "ability" &&
-                              m.slug === r.slug &&
-                              m.slot === slot
+                              m?.kind === "agent" && m.slug === r.slug
                                 ? null
-                                : { kind: "ability", slug: r.slug, slot },
+                                : { kind: "agent", slug: r.slug },
                             )
                           }
-                          className={`h-7 w-7 rounded border text-[11px] font-bold ${
-                            placementMode?.kind === "ability" &&
-                            placementMode.slug === r.slug &&
-                            placementMode.slot === slot
-                              ? "border-cyan-400 bg-cyan-950/50 text-white"
-                              : "border-violet-800/50 bg-slate-950/70 text-violet-200"
+                          className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                            placementMode?.kind === "agent" &&
+                            placementMode.slug === r.slug
+                              ? "border-violet-400 bg-violet-950/60 text-white"
+                              : "border-violet-800/45 bg-slate-950/60 text-violet-200"
                           }`}
                         >
-                          {slot.toUpperCase()}
+                          {r.name}
                         </button>
-                      ))}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {r.allowedAbilitySlots.map((slot) => {
+                          const vm = abilityMetaForSlot(
+                            valorantAbilityUi,
+                            r.slug,
+                            slot,
+                          );
+                          const title = vm
+                            ? `${vm.displayName}\n\n${vm.description}`
+                            : `Place ${slot.toUpperCase()} for ${r.name}`;
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              title={title}
+                              onClick={() =>
+                                setPlacementMode((m) =>
+                                  m?.kind === "ability" &&
+                                  m.slug === r.slug &&
+                                  m.slot === slot
+                                    ? null
+                                    : { kind: "ability", slug: r.slug, slot },
+                                )
+                              }
+                              className={`flex min-h-[2.25rem] min-w-[3.25rem] max-w-[7rem] flex-col items-center justify-center rounded border px-1 py-0.5 text-left leading-tight transition ${
+                                placementMode?.kind === "ability" &&
+                                placementMode.slug === r.slug &&
+                                placementMode.slot === slot
+                                  ? "border-cyan-400 bg-cyan-950/50 text-white"
+                                  : "border-violet-800/50 bg-slate-950/70 text-violet-200"
+                              }`}
+                            >
+                              <span className="text-[11px] font-bold">
+                                {slot.toUpperCase()}
+                              </span>
+                              {vm ? (
+                                <span className="line-clamp-2 w-full text-center text-[9px] font-normal text-violet-300/85">
+                                  {vm.displayName}
+                                </span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   ))}
                 </div>
