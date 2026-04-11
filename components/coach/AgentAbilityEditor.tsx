@@ -20,8 +20,17 @@ import {
   fetchValorantAbilityUiBySlug,
   type ValorantAbilityUiMeta,
 } from "@/lib/valorant-api-abilities";
+import {
+  BLUEPRINT_CANVAS_SIZE,
+  blueprintStratSizingReadout,
+  STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO,
+} from "@/lib/agent-ability-blueprint-scale";
+import type { GameMap } from "@/types/catalog";
+import { AbilityBlueprintMapPreview } from "@/components/coach/AbilityBlueprintMapPreview";
+import { BlueprintGeometryFields } from "@/components/coach/BlueprintGeometryFields";
+import { viewBoxRectFromMap } from "@/lib/strat-map-display";
 
-const VB = 1000;
+const VB = BLUEPRINT_CANVAS_SIZE;
 const VB_STR = `0 0 ${VB} ${VB}`;
 
 const SLOT_VALUES: AgentAbilitySlot[] = ["q", "e", "c", "x"];
@@ -329,7 +338,13 @@ function pointsDoneCount(kind: AgentAbilityShapeKind): number {
   }
 }
 
-export function AgentAbilityEditor({ agent }: { agent: Agent }) {
+export function AgentAbilityEditor({
+  agent,
+  maps,
+}: {
+  agent: Agent;
+  maps: GameMap[];
+}) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const initial = agent.abilities_blueprint ?? [];
   const [abilities, setAbilities] = useState<AgentAbilityBlueprint[]>(initial);
@@ -366,6 +381,17 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
   const [draftName, setDraftName] = useState("");
   const [draftShape, setDraftShape] = useState<AgentAbilityShapeKind>("circle");
   const [draftColor, setDraftColor] = useState("#a78bfa");
+  const [previewMapId, setPreviewMapId] = useState<string | null>(
+    maps[0]?.id ?? null,
+  );
+
+  const previewMap = useMemo(() => {
+    if (maps.length === 0) return null;
+    const pick = previewMapId
+      ? maps.find((m) => m.id === previewMapId)
+      : null;
+    return pick ?? maps[0] ?? null;
+  }, [maps, previewMapId]);
 
   const selected = useMemo(
     () => abilities.find((a) => a.id === selectedId) ?? null,
@@ -448,6 +474,20 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
     setAbilities((a) => a.filter((x) => x.id !== id));
     if (selectedId === id) setSelectedId(null);
   }
+
+  const updateSelectedGeometry = useCallback(
+    (geo: AgentAbilityGeometry) => {
+      if (!selectedId) return;
+      setAbilities((list) =>
+        list.map((b) =>
+          b.id === selectedId
+            ? { ...b, geometry: geo, shapeKind: geo.kind }
+            : b,
+        ),
+      );
+    },
+    [selectedId],
+  );
 
   async function onSave() {
     setSaving(true);
@@ -573,6 +613,38 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
               role="presentation"
             >
               <rect width={VB} height={VB} fill="rgb(15,23,42)" />
+              <g pointerEvents="none" opacity={0.55}>
+                {Array.from({ length: 11 }, (_, i) => (
+                  <line
+                    key={`gv-${i}`}
+                    x1={i * 100}
+                    y1={0}
+                    x2={i * 100}
+                    y2={VB}
+                    stroke={
+                      i % 5 === 0
+                        ? "rgba(148,163,184,0.22)"
+                        : "rgba(148,163,184,0.1)"
+                    }
+                    strokeWidth={i % 5 === 0 ? 1.2 : 0.55}
+                  />
+                ))}
+                {Array.from({ length: 11 }, (_, i) => (
+                  <line
+                    key={`gh-${i}`}
+                    x1={0}
+                    y1={i * 100}
+                    x2={VB}
+                    y2={i * 100}
+                    stroke={
+                      i % 5 === 0
+                        ? "rgba(148,163,184,0.22)"
+                        : "rgba(148,163,184,0.1)"
+                    }
+                    strokeWidth={i % 5 === 0 ? 1.2 : 0.55}
+                  />
+                ))}
+              </g>
               <text
                 x={VB / 2}
                 y={36}
@@ -580,7 +652,8 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
                 fill="rgba(148,163,184,0.55)"
                 style={{ fontSize: VB * 0.022, fontFamily: "system-ui" }}
               >
-                Ability blueprint (normalized {VB}×{VB}) — not map-bound
+                Blueprint space {VB}×{VB} units — major grid 100 · strat scale{" "}
+                {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of map width (bbox)
               </text>
               {abilities.map((b) => (
                 <g
@@ -801,9 +874,51 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
               ))}
             </ul>
             {selected && (
-              <p className="mt-2 text-[11px] leading-relaxed text-violet-400/55">
-                Selected geometry: <code className="text-violet-300/80">{selected.geometry.kind}</code>. Remove and place again to change shape.
-              </p>
+              <div className="mt-3 space-y-3 border-t border-violet-800/35 pt-3">
+                <p className="text-[11px] text-violet-400/75">
+                  Edit coordinates in{" "}
+                  <strong className="text-violet-200/90">blueprint units</strong> (0–
+                  {VB}). Strat maps use the same uniform scale as{" "}
+                  <code className="text-violet-300/85">StratAbilityBlueprintSvg</code>
+                  : bounding-box max side →{" "}
+                  {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of view width.
+                </p>
+                {(() => {
+                  const { bboxMaxSide, targetPercentOfMapWidth } =
+                    blueprintStratSizingReadout(selected);
+                  const w = previewMap
+                    ? viewBoxRectFromMap(previewMap).width
+                    : null;
+                  const perBp =
+                    w != null && bboxMaxSide > 0
+                      ? (STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * w) /
+                        bboxMaxSide
+                      : null;
+                  return (
+                    <p className="rounded-md border border-violet-800/40 bg-slate-950/50 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-violet-200/90">
+                      BBox max side: {bboxMaxSide.toFixed(3)} bp. On strats, that
+                      side spans {targetPercentOfMapWidth}% of map view width
+                      (uniform).
+                      {perBp != null && previewMap && w != null ? (
+                        <>
+                          {" "}
+                          Preview{" "}
+                          <span className="text-violet-100/95">{previewMap.name}</span>
+                          : view width {w.toFixed(1)} →{" "}
+                          <strong className="text-violet-50/95">
+                            {perBp.toFixed(4)}
+                          </strong>{" "}
+                          map units per 1 bp unit.
+                        </>
+                      ) : null}
+                    </p>
+                  );
+                })()}
+                <BlueprintGeometryFields
+                  geometry={selected.geometry}
+                  onChange={updateSelectedGeometry}
+                />
+              </div>
             )}
           </div>
 
@@ -821,6 +936,49 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
             Save to agent
           </button>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-emerald-900/35 bg-slate-950/50 p-4">
+        <h3 className="text-sm font-semibold text-emerald-100/95">
+          Map preview (same scale as strat designer)
+        </h3>
+        <p className="mt-1 text-xs leading-relaxed text-violet-300/65">
+          Overlay the selected blueprint on a real map. Sizing matches strat stages: the
+          shape’s bounding box is scaled so its larger side equals{" "}
+          {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of the map viewBox width, then
+          centered on the anchor point (same as ability pins).
+        </p>
+        {maps.length === 0 ? (
+          <p className="mt-3 text-sm text-amber-200/80">
+            No maps in the database — add maps under Coach → Maps to use this preview.
+          </p>
+        ) : (
+          <>
+            <label className="label mt-3 block" htmlFor="ab-preview-map">
+              Preview map
+            </label>
+            <select
+              id="ab-preview-map"
+              value={previewMap?.id ?? ""}
+              onChange={(e) => setPreviewMapId(e.target.value || null)}
+              className="input-field mt-1 max-w-md"
+            >
+              {maps.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            {previewMap ? (
+              <div className="mt-4">
+                <AbilityBlueprintMapPreview
+                  gameMap={previewMap}
+                  blueprint={selected}
+                />
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

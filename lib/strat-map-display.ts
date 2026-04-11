@@ -99,7 +99,9 @@ export function stratMapDisplayData(
     }),
     location_labels: em.location_labels.map((l) => ({
       ...l,
-      ...transformLocationLabelForViewBoxCenterFlip(rect, rect.width, l),
+      ...transformLocationLabelForViewBoxCenterFlip(rect, rect.width, l, {
+        collapseReadableRotation: false,
+      }),
     })),
   };
 }

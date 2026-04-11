@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAgentBySlug } from "@/lib/catalog-queries";
+import { getAgentBySlug, listMaps } from "@/lib/catalog-queries";
 import { AgentAbilityEditor } from "@/components/coach/AgentAbilityEditor";
 import { ArrowLeft } from "lucide-react";
 
@@ -37,6 +37,13 @@ export default async function CoachAgentEditorPage({ params }: Props) {
 
   if (!agent) notFound();
 
+  let maps: Awaited<ReturnType<typeof listMaps>> = [];
+  try {
+    maps = await listMaps();
+  } catch {
+    maps = [];
+  }
+
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="shrink-0 border-b border-violet-500/15 px-4 py-5 md:py-6">
@@ -63,7 +70,7 @@ export default async function CoachAgentEditorPage({ params }: Props) {
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 md:py-8">
         <div className="mx-auto w-full max-w-6xl">
-          <AgentAbilityEditor agent={agent} />
+          <AgentAbilityEditor agent={agent} maps={maps} />
         </div>
       </div>
     </main>

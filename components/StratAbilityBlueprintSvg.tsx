@@ -6,8 +6,12 @@ import {
   blueprintBoundsCenterAndSpan,
   blueprintGeometryBounds,
 } from "@/lib/strat-ability-blueprint-bounds";
+import {
+  BLUEPRINT_CANVAS_SIZE,
+  stratBlueprintTargetSpanForMap,
+} from "@/lib/agent-ability-blueprint-scale";
 
-const BP = 1000;
+const BP = BLUEPRINT_CANVAS_SIZE;
 
 function arcPathD(g: Extract<AgentAbilityGeometry, { kind: "arc" }>): string {
   const rad = (d: number) => (d * Math.PI) / 180;
@@ -23,7 +27,8 @@ function arcPathD(g: Extract<AgentAbilityGeometry, { kind: "arc" }>): string {
 
 /**
  * Renders a coach-saved ability blueprint (normalized 0–1000 canvas) on the strat map
- * at `(mapX, mapY)`, scaled to ~22% of map width. Uses non-scaling strokes so lines stay
+ * at `(mapX, mapY)`, scaled so the bbox max side matches the strat ratio (see
+ * `STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO`). Uses non-scaling strokes so lines stay
  * visible when scaled.
  */
 export function StratAbilityBlueprintSvg({
@@ -46,7 +51,7 @@ export function StratAbilityBlueprintSvg({
   const fill = `${blueprint.color}44`;
   const bounds = blueprintGeometryBounds(g);
   const { cx, cy, span } = blueprintBoundsCenterAndSpan(bounds);
-  const targetSpan = vbWidth * 0.22;
+  const targetSpan = stratBlueprintTargetSpanForMap(vbWidth);
   const scale = targetSpan / span;
   const swMap = Math.max(vbWidth * 0.0016, 1.25) * (selected ? 1.35 : 1);
   const op = selected ? 1 : 0.92;

@@ -13,15 +13,28 @@ export function normalizeLabelRotationDeg(deg: number): number {
   return d;
 }
 
+export type ViewBoxCenterLabelFlipOptions = {
+  /**
+   * When true (default), rotation near ±180° after the flip is collapsed to 0° so text
+   * stays upright (editor “Swap sides”). Set false for a true point reflection so label
+   * placement matches flipped overlays/spawns/strat pins.
+   */
+  collapseReadableRotation?: boolean;
+};
+
 /**
  * Rotation after point reflection through the viewBox center (same as Swap sides).
- * Adds 180° to world orientation; near-upside-down values collapse to 0° for readability.
+ * Adds 180° to world orientation; optionally collapses near-upside-down values to 0°.
  */
-export function labelRotationAfterViewBoxCenterPointFlip(deg: number): number {
+export function labelRotationAfterViewBoxCenterPointFlip(
+  deg: number,
+  options?: ViewBoxCenterLabelFlipOptions,
+): number {
   let r = normalizeLabelRotationDeg(
     normalizeLabelRotationDeg(deg) + 180,
   );
-  if (Math.abs(r) >= 179) r = 0;
+  const collapse = options?.collapseReadableRotation !== false;
+  if (collapse && Math.abs(r) >= 179) r = 0;
   return r;
 }
 
@@ -142,6 +155,7 @@ export function transformLocationLabelForViewBoxCenterFlip(
   vb: ViewBoxRect,
   vbWidth: number,
   l: MapLocationLabel,
+  options?: ViewBoxCenterLabelFlipOptions,
 ): Pick<MapLocationLabel, "x" | "y" | "text_anchor" | "text_rotation_deg"> {
   const fs = vbWidth * 0.026 * l.size;
   const pinR = vbWidth * 0.014 * l.size * 0.55;
@@ -176,7 +190,8 @@ export function transformLocationLabelForViewBoxCenterFlip(
   });
   const legacyErr =
     (tpLegacy.x - tpF.x) ** 2 + (tpLegacy.y - tpF.y) ** 2;
-  const tol = Math.max(fs * fs * 1e-10, 1e-12);
+  /** Allow sub-pixel float drift in viewBox units (legacy swap is otherwise exact). */
+  const tol = Math.max(fs * fs * 1e-8, 1e-6);
 
   let text_anchor: MapLabelTextAnchor =
     legacyErr <= tol
@@ -195,6 +210,7 @@ export function transformLocationLabelForViewBoxCenterFlip(
     text_anchor,
     text_rotation_deg: labelRotationAfterViewBoxCenterPointFlip(
       l.text_rotation_deg ?? 0,
+      options,
     ),
   };
 }
