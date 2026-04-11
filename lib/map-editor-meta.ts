@@ -53,6 +53,7 @@ function newId(): string {
 export function defaultEditorMeta(): MapEditorMeta {
   return {
     show_reference_image: true,
+    map_geometry_scale: 1,
     side_meaning_inverted: false,
     active_floor: "lower",
     ghost_other_floor: true,
@@ -67,6 +68,10 @@ export function normalizeEditorMeta(raw: unknown): MapEditorMeta {
   const o = raw as Record<string, unknown>;
   if (typeof o.show_reference_image === "boolean") {
     d.show_reference_image = o.show_reference_image;
+  }
+  const mgs = o.map_geometry_scale;
+  if (typeof mgs === "number" && Number.isFinite(mgs)) {
+    d.map_geometry_scale = Math.min(8, Math.max(0.05, mgs));
   }
   if (typeof o.side_meaning_inverted === "boolean") {
     d.side_meaning_inverted = o.side_meaning_inverted;

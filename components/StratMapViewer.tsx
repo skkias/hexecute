@@ -25,6 +25,11 @@ import {
 } from "@/lib/map-overlay-geometry";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
 import { outlinePathForStratDisplay } from "@/lib/map-strat-side";
+import { normalizeEditorMeta } from "@/lib/map-editor-meta";
+import {
+  mapGeometryGroupTransform,
+  mapGeometryScaleFromEditorMeta,
+} from "@/lib/map-geometry-scale";
 import { clientToSvgPoint } from "@/lib/svg-coords";
 import type { MapPoint, ViewBoxRect } from "@/lib/map-path";
 import { RopeOverlaySvg } from "@/components/RopeOverlaySvg";
@@ -387,6 +392,14 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
     [gameMap, side],
   );
 
+  const mapGeoScale = mapGeometryScaleFromEditorMeta(
+    normalizeEditorMeta(gameMap.editor_meta),
+  );
+  const geometryGroupTransform = useMemo(
+    () => mapGeometryGroupTransform(vb, mapGeoScale),
+    [vb, mapGeoScale],
+  );
+
   canvasRef.current = vb;
   const displayVb = viewport ?? vb;
   const vbStr = `${displayVb.minX} ${displayVb.minY} ${displayVb.width} ${displayVb.height}`;
@@ -631,6 +644,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
             fill="rgb(15,23,42)"
           />
 
+          <g transform={geometryGroupTransform}>
           {effectiveVis.territoryOutline &&
             territoryPathD &&
             territoryPathD.trim().length > 0 && (
@@ -817,6 +831,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
           ) : null}
 
           {children}
+          </g>
         </svg>
       </div>
       {showFooter ? (

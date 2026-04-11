@@ -35,6 +35,11 @@ import {
   type ViewBoxRect,
 } from "@/lib/map-path";
 import {
+  mapGeometryGroupTransform,
+  mapGeometryScaleFromEditorMeta,
+  rootPointToLogicalGeometry,
+} from "@/lib/map-geometry-scale";
+import {
   mapLabelTextSvgProps,
   transformLocationLabelForViewBoxCenterFlip,
 } from "@/lib/map-label-layout";
@@ -830,6 +835,22 @@ export function MapShapeEditor({
     [vb.minX, vb.minY, vb.width, vb.height],
   );
 
+  const mapGeoScale = mapGeometryScaleFromEditorMeta(editorMeta);
+  const geometryGroupTransform = useMemo(
+    () => mapGeometryGroupTransform(vbRect, mapGeoScale),
+    [vbRect, mapGeoScale],
+  );
+
+  const clientToSvgLogical = useCallback(
+    (svg: SVGSVGElement, clientX: number, clientY: number) =>
+      rootPointToLogicalGeometry(
+        clientToSvg(svg, clientX, clientY),
+        vbRect,
+        mapGeoScale,
+      ),
+    [vbRect, mapGeoScale],
+  );
+
   const { defOuter, defHoles } = useMemo(() => {
     const d = defenseRingsFromAttack(vbRect, outlineOuter, outlineHoles);
     return { defOuter: d.outer, defHoles: d.holes };
@@ -976,7 +997,7 @@ export function MapShapeEditor({
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const canvas = vbRef.current;
-      const pt = clientToSvg(el, e.clientX, e.clientY);
+      const pt = clientToSvgLogical(el, e.clientX, e.clientY);
       const zoomIn = e.deltaY < 0;
       setViewport((prev) => {
         const cur: ViewRect = prev ?? {
@@ -1148,7 +1169,7 @@ export function MapShapeEditor({
       if (tool !== "edit") return false;
       const svg = svgRef.current;
       if (!svg) return false;
-      const p = clientToSvg(svg, clientX, clientY);
+      const p = clientToSvgLogical(svg, clientX, clientY);
       const maxDist = 14 * svgUserPerPx;
 
       let points: MapPoint[];
@@ -1228,7 +1249,7 @@ export function MapShapeEditor({
       setPlaceMode("none");
       const svg = svgRef.current;
       if (!svg) return;
-      const startSvg = clientToSvg(svg, e.clientX, e.clientY);
+      const startSvg = clientToSvgLogical(svg, e.clientX, e.clientY);
       annotationDragRef.current = {
         pointerId: e.pointerId,
         kind: "spawn",
@@ -1265,7 +1286,7 @@ export function MapShapeEditor({
       setSidebarTab("annotation");
       const svg = svgRef.current;
       if (!svg) return;
-      const startSvg = clientToSvg(svg, e.clientX, e.clientY);
+      const startSvg = clientToSvgLogical(svg, e.clientX, e.clientY);
       annotationDragRef.current = {
         pointerId: e.pointerId,
         kind: "label",
@@ -1285,7 +1306,7 @@ export function MapShapeEditor({
     e.preventDefault();
     const svg = svgRef.current;
     if (!svg) return;
-    const cur = clientToSvg(svg, e.clientX, e.clientY);
+    const cur = clientToSvgLogical(svg, e.clientX, e.clientY);
     const dx = cur.x - ad.startSvg.x;
     const dy = cur.y - ad.startSvg.y;
     const nx = ad.startX + dx;
@@ -1356,7 +1377,7 @@ export function MapShapeEditor({
         if (t.tagName === "circle" && !t.getAttribute("data-map-ann")) return;
         const svg = svgRef.current;
         if (!svg) return;
-        const p = clientToSvg(svg, e.clientX, e.clientY);
+        const p = clientToSvgLogical(svg, e.clientX, e.clientY);
         if (placeMode === "spawn-atk") {
           setEditorMeta((m) => ({
             ...m,
@@ -1414,7 +1435,7 @@ export function MapShapeEditor({
       if (tool !== "draw") return;
       const svg = svgRef.current;
       if (!svg) return;
-      const p = clientToSvg(svg, e.clientX, e.clientY);
+      const p = clientToSvgLogical(svg, e.clientX, e.clientY);
 
       if (drawShapeMode === "circle" && placeMode === "none") {
         if (activeLayer.kind === "outline") {
@@ -1603,7 +1624,7 @@ export function MapShapeEditor({
       else setSidebarTab("objects");
       const svg = svgRef.current;
       if (!svg) return;
-      const startSvg = clientToSvg(svg, e.clientX, e.clientY);
+      const startSvg = clientToSvgLogical(svg, e.clientX, e.clientY);
       let indices: number[];
       const sameLayer =
         selection &&
@@ -1672,7 +1693,7 @@ export function MapShapeEditor({
       if (!d || e.pointerId !== d.pointerId) return;
       const svg = svgRef.current;
       if (!svg) return;
-      const cur = clientToSvg(svg, e.clientX, e.clientY);
+      const cur = clientToSvgLogical(svg, e.clientX, e.clientY);
       const dx = cur.x - d.startSvg.x;
       const dy = cur.y - d.startSvg.y;
       if (d.layer.kind === "outline") {
@@ -1783,7 +1804,7 @@ export function MapShapeEditor({
     if (tool !== "edit") return;
     const svg = svgRef.current;
     if (!svg) return;
-    const startSvg = clientToSvg(svg, e.clientX, e.clientY);
+    const startSvg = clientToSvgLogical(svg, e.clientX, e.clientY);
     const layer: ActiveLayer = { kind: "overlay", id: sh.id };
     let indices: number[];
     const sameLayer =
@@ -2547,6 +2568,7 @@ export function MapShapeEditor({
                 </text>
               ) : null}
 
+              <g transform={geometryGroupTransform}>
               {outlineAtkD && (
                 <path
                   d={outlineAtkD}
@@ -3045,6 +3067,7 @@ export function MapShapeEditor({
                     </g>
                   );
                 })}
+              </g>
               </g>
             </svg>
           </div>
@@ -4331,6 +4354,33 @@ export function MapShapeEditor({
                 setTransform((t) => ({ ...t, ty: Number(e.target.value) }))
               }
               className="mt-1 w-full accent-violet-500"
+            />
+          </div>
+
+          <div className="mt-4 border-t border-violet-800/40 pt-4">
+            <span className="label">Geometry scale (vectors vs reference)</span>
+            <p className="mt-1 text-[11px] leading-relaxed text-violet-400/60">
+              Scales outlines, overlays, spawns, and labels together about the map
+              center. The bitmap uses Image transform above — use this when traced
+              shapes don&apos;t match reference art scale. Strat view uses the same
+              factor.
+            </p>
+            <label className="mt-2 block text-xs text-violet-300/55">
+              Scale ({(editorMeta.map_geometry_scale ?? 1).toFixed(2)}×)
+            </label>
+            <input
+              type="range"
+              min={0.25}
+              max={3}
+              step={0.01}
+              value={editorMeta.map_geometry_scale ?? 1}
+              onChange={(e) =>
+                setEditorMeta((m) => ({
+                  ...m,
+                  map_geometry_scale: Number(e.target.value),
+                }))
+              }
+              className="mt-1 w-full accent-emerald-500"
             />
           </div>
 

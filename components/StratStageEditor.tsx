@@ -13,6 +13,11 @@ import type {
 } from "@/types/strat";
 import { StratMapViewer } from "@/components/StratMapViewer";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
+import { normalizeEditorMeta } from "@/lib/map-editor-meta";
+import {
+  mapGeometryScaleFromEditorMeta,
+  rootPointToLogicalGeometry,
+} from "@/lib/map-geometry-scale";
 import { clientToSvgPoint } from "@/lib/svg-coords";
 import { allowedAbilitySlotsFromBlueprint } from "@/lib/agent-blueprint-ability-slots";
 import { createEmptyStratStage } from "@/lib/strat-stages";
@@ -136,6 +141,24 @@ export function StratStageEditor({
     const d = stratMapDisplayData(gameMap, side);
     return { vb: d.vb, vbWidth: d.vb.width };
   }, [gameMap, side]);
+
+  const mapGeoScale = useMemo(
+    () =>
+      mapGeometryScaleFromEditorMeta(
+        normalizeEditorMeta(gameMap.editor_meta),
+      ),
+    [gameMap.editor_meta],
+  );
+
+  const svgPointerToLogical = useCallback(
+    (svg: SVGSVGElement, clientX: number, clientY: number) =>
+      rootPointToLogicalGeometry(
+        clientToSvgPoint(svg, clientX, clientY),
+        vb,
+        mapGeoScale,
+      ),
+    [vb, mapGeoScale],
+  );
 
   const roster = useMemo(() => {
     const slugs = compSlugs.map((s) => s.trim()).filter(Boolean);
@@ -300,7 +323,7 @@ export function StratStageEditor({
     const onMove = (e: PointerEvent) => {
       const svg = svgRef.current;
       if (!svg || !activeStage) return;
-      const raw = clientToSvgPoint(svg, e.clientX, e.clientY);
+      const raw = svgPointerToLogical(svg, e.clientX, e.clientY);
       const pDisplay = clampToViewBox(vb, {
         x: raw.x - drag.grabDx,
         y: raw.y - drag.grabDy,
@@ -334,12 +357,21 @@ export function StratStageEditor({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [drag, activeStage, activeStageIndex, vb, side, setAgents, setAbilities]);
+  }, [
+    drag,
+    activeStage,
+    activeStageIndex,
+    vb,
+    side,
+    setAgents,
+    setAbilities,
+    svgPointerToLogical,
+  ]);
 
   function onMapBackgroundPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
     if (!placementMode || !svgRef.current || !activeStage) return;
-    const raw = clientToSvgPoint(svgRef.current, e.clientX, e.clientY);
+    const raw = svgPointerToLogical(svgRef.current, e.clientX, e.clientY);
     const pDisplay = clampToViewBox(vb, raw);
     const p = stratStagePinToStoredAttack(vb, side, pDisplay);
     if (placementMode.kind === "agent") {
@@ -406,7 +438,7 @@ export function StratStageEditor({
               focusMapSvg();
               const svg = svgRef.current;
               if (svg) {
-                const o = clientToSvgPoint(svg, e.clientX, e.clientY);
+                const o = svgPointerToLogical(svg, e.clientX, e.clientY);
                 setDrag({
                   kind: "agent",
                   id: a.id,
@@ -446,7 +478,7 @@ export function StratStageEditor({
               focusMapSvg();
               const svg = svgRef.current;
               if (svg) {
-                const o = clientToSvgPoint(svg, e.clientX, e.clientY);
+                const o = svgPointerToLogical(svg, e.clientX, e.clientY);
                 setDrag({
                   kind: "ability",
                   id: ab.id,

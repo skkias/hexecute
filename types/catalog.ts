@@ -144,6 +144,12 @@ export interface MapLocationLabel {
 export interface MapEditorMeta {
   show_reference_image: boolean;
   /**
+   * Uniform scale of all vector geometry (outlines, overlays, spawns, labels, strat
+   * pins) about the viewBox center. Reference image uses `image_transform` only — use
+   * this to align traced shapes to bitmap scale. Default 1.
+   */
+  map_geometry_scale?: number;
+  /**
    * When true, the purple outline (`path_atk`) is treated as defense territory and
    * the mirrored cyan shape (`path_def`) as attack for strats and labels.
    */
