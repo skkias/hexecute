@@ -27,6 +27,7 @@ import { stratMapDisplayData } from "@/lib/strat-map-display";
 import { outlinePathForStratSide } from "@/lib/map-strat-side";
 import { clientToSvgPoint } from "@/lib/svg-coords";
 import type { MapPoint, ViewBoxRect } from "@/lib/map-path";
+import { RopeOverlaySvg } from "@/components/RopeOverlaySvg";
 
 /** Read-only map overlay rendering (aligned with `MapShapeEditor` colors). */
 const SPAWN_ATK_FILL = "#ff3e3e";
@@ -57,7 +58,8 @@ function isOpenPolylineOverlayKind(kind: MapOverlayKind): boolean {
   return (
     kind === "grade" ||
     kind === "breakable_doorway" ||
-    kind === "toggle_door"
+    kind === "toggle_door" ||
+    kind === "rope"
   );
 }
 
@@ -277,6 +279,7 @@ export type StratMapLayerVisibility = {
   grade: boolean;
   breakable_doorway: boolean;
   toggle_door: boolean;
+  rope: boolean;
 };
 
 const DEFAULT_VISIBILITY: StratMapLayerVisibility = {
@@ -293,6 +296,7 @@ const DEFAULT_VISIBILITY: StratMapLayerVisibility = {
   grade: true,
   breakable_doorway: true,
   toggle_door: true,
+  rope: true,
 };
 
 const MAP_VIEWPORT_MIN_H_PX = 200;
@@ -565,6 +569,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
           {toggleRow("grade", "Grade")}
           {toggleRow("breakable_doorway", "Breakable doors")}
           {toggleRow("toggle_door", "Toggle doors")}
+          {toggleRow("rope", "Ropes / ziplines")}
         </div>
       ) : null}
 
@@ -651,6 +656,13 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
                 return (
                   <g key={sh.id}>
                     <DoorwayOverlaySvg sh={sh} vbWidth={vbW} />
+                  </g>
+                );
+              }
+              if (sh.kind === "rope") {
+                return (
+                  <g key={sh.id}>
+                    <RopeOverlaySvg sh={sh} vbWidth={vbW} />
                   </g>
                 );
               }

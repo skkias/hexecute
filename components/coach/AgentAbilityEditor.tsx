@@ -15,16 +15,36 @@ import {
 } from "@/app/coach/agent-actions";
 import type { MapPoint } from "@/lib/map-path";
 import { clientToSvgPoint } from "@/lib/svg-coords";
+import {
+  abilityMetaForSlot,
+  fetchValorantAbilityUiBySlug,
+  type ValorantAbilityUiMeta,
+} from "@/lib/valorant-api-abilities";
 
 const VB = 1000;
 const VB_STR = `0 0 ${VB} ${VB}`;
 
-const SLOT_OPTIONS: { value: AgentAbilitySlot; label: string }[] = [
-  { value: "q", label: "Q" },
-  { value: "e", label: "E" },
-  { value: "c", label: "C" },
-  { value: "x", label: "X" },
-];
+const SLOT_VALUES: AgentAbilitySlot[] = ["q", "e", "c", "x"];
+
+function slotSelectLabel(
+  bySlug: Record<string, ValorantAbilityUiMeta[]> | null,
+  agentSlug: string,
+  slot: AgentAbilitySlot,
+): string {
+  const meta = bySlug ? abilityMetaForSlot(bySlug, agentSlug, slot) : undefined;
+  const key = slot.toUpperCase();
+  if (meta?.displayName) return `${meta.displayName} (${key})`;
+  return key;
+}
+
+function slotCompactLabel(
+  bySlug: Record<string, ValorantAbilityUiMeta[]> | null,
+  agentSlug: string,
+  slot: AgentAbilitySlot,
+): string {
+  const meta = bySlug ? abilityMetaForSlot(bySlug, agentSlug, slot) : undefined;
+  return meta?.displayName ?? slot.toUpperCase();
+}
 
 const SHAPE_OPTIONS: { value: AgentAbilityShapeKind; label: string; hint: string }[] =
   [
@@ -324,6 +344,24 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
     setPortraitUrl(agent.portrait_url ?? "");
   }, [agent.id, agent.portrait_url]);
 
+  const [valorantUiBySlug, setValorantUiBySlug] = useState<
+    Record<string, ValorantAbilityUiMeta[]> | null
+  >(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchValorantAbilityUiBySlug()
+      .then((m) => {
+        if (!cancelled) setValorantUiBySlug(m);
+      })
+      .catch(() => {
+        if (!cancelled) setValorantUiBySlug({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [draftSlot, setDraftSlot] = useState<AgentAbilitySlot>("q");
   const [draftName, setDraftName] = useState("");
   const [draftShape, setDraftShape] = useState<AgentAbilityShapeKind>("circle");
@@ -596,8 +634,9 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
           {placement ? (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-violet-800/40 bg-violet-950/25 px-3 py-2 text-sm text-violet-100/90">
               <span>
-                Placing: <strong>{placement.name}</strong> ({placement.shapeKind}) —{" "}
-                {placementHint(placement.shapeKind)}
+                Placing: <strong>{placement.name}</strong> ·{" "}
+                {slotCompactLabel(valorantUiBySlug, agent.slug, placement.slot)} ·{" "}
+                {placement.shapeKind} — {placementHint(placement.shapeKind)}
               </span>
               {(placement.shapeKind === "polyline" ||
                 placement.shapeKind === "polygon") && (
@@ -657,9 +696,19 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
               className="input-field"
               disabled={!!placement}
             >
-              {SLOT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
+              {SLOT_VALUES.map((slot) => (
+                <option
+                  key={slot}
+                  value={slot}
+                  title={
+                    abilityMetaForSlot(
+                      valorantUiBySlug ?? {},
+                      agent.slug,
+                      slot,
+                    )?.description ?? undefined
+                  }
+                >
+                  {slotSelectLabel(valorantUiBySlug, agent.slug, slot)}
                 </option>
               ))}
             </select>
@@ -734,8 +783,8 @@ export function AgentAbilityEditor({ agent }: { agent: Agent }) {
                     className="min-w-0 flex-1 truncate text-left text-violet-100/90"
                     onClick={() => setSelectedId(b.id)}
                   >
-                    <span className="font-mono text-xs text-violet-400/80">
-                      {b.slot.toUpperCase()}
+                    <span className="text-xs text-violet-400/80">
+                      {slotCompactLabel(valorantUiBySlug, agent.slug, b.slot)}
                     </span>{" "}
                     {b.name}{" "}
                     <span className="text-violet-500/60">({b.shapeKind})</span>

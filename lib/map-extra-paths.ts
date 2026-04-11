@@ -23,6 +23,15 @@ function asFiniteNumber(v: unknown): number | null {
   return null;
 }
 
+function parseMapPoint(raw: unknown): MapPoint | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const x = asFiniteNumber(r.x);
+  const y = asFiniteNumber(r.y);
+  if (x === null || y === null) return null;
+  return { x, y };
+}
+
 function parseFloor(raw: unknown): MapFloorId {
   return raw === "upper" ? "upper" : "lower";
 }
@@ -37,6 +46,7 @@ function parseKind(raw: unknown): MapOverlayKind | null {
     k === "grade" ||
     k === "breakable_doorway" ||
     k === "toggle_door" ||
+    k === "rope" ||
     k === "plant_site"
   ) {
     return k;
@@ -71,6 +81,21 @@ export function normalizeExtraPaths(raw: unknown): MapOverlayShape[] {
       const py = asFiniteNumber((pt as { y?: unknown }).y);
       if (px !== null && py !== null) {
         points.push({ x: px, y: py });
+      }
+    }
+    let overlayPoints: MapPoint[] = points;
+    let ropeEnter: MapPoint | undefined;
+    let ropeExit: MapPoint | undefined;
+    if (kind === "rope") {
+      const eIn = parseMapPoint(o.enter);
+      const eOut = parseMapPoint(o.exit);
+      if (points.length >= 2) {
+        ropeEnter = points[0];
+        ropeExit = points[points.length - 1];
+      } else if (eIn && eOut) {
+        overlayPoints = [eIn, eOut];
+        ropeEnter = eIn;
+        ropeExit = eOut;
       }
     }
     let gradeHighSide: 1 | -1 | undefined;
@@ -124,11 +149,22 @@ export function normalizeExtraPaths(raw: unknown): MapOverlayShape[] {
         id,
         kind,
         floor,
-        points,
+        points: overlayPoints,
         gradeHighSide,
         ...(door_is_open !== undefined ? { door_is_open } : {}),
+        ...(kind === "rope" && ropeEnter && ropeExit
+          ? { enter: ropeEnter, exit: ropeExit }
+          : {}),
       });
     }
   }
   return out;
+}
+
+/** Polyline vertices for rope / zipline overlays (prefers stored `points`, else `enter`→`exit`). */
+export function ropePolylinePoints(sh: MapOverlayShape): MapPoint[] {
+  if (sh.kind !== "rope") return sh.points;
+  if (sh.points.length >= 2) return sh.points;
+  if (sh.enter && sh.exit) return [sh.enter, sh.exit];
+  return sh.points;
 }

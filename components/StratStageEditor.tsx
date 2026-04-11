@@ -29,6 +29,10 @@ import {
   roleAccent,
 } from "@/lib/strat-stage-pin-styles";
 import type { MapPoint, ViewBoxRect } from "@/lib/map-path";
+import {
+  stratStagePinForDisplay,
+  stratStagePinToStoredAttack,
+} from "@/lib/strat-stage-coords";
 
 type PlacementMode =
   | null
@@ -295,10 +299,11 @@ export function StratStageEditor({
       const svg = svgRef.current;
       if (!svg || !activeStage) return;
       const raw = clientToSvgPoint(svg, e.clientX, e.clientY);
-      const p = clampToViewBox(vb, {
+      const pDisplay = clampToViewBox(vb, {
         x: raw.x - drag.grabDx,
         y: raw.y - drag.grabDy,
       });
+      const p = stratStagePinToStoredAttack(vb, side, pDisplay);
       if (drag.kind === "agent") {
         setAgents(
           activeStageIndex,
@@ -327,13 +332,14 @@ export function StratStageEditor({
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [drag, activeStage, activeStageIndex, vb, setAgents, setAbilities]);
+  }, [drag, activeStage, activeStageIndex, vb, side, setAgents, setAbilities]);
 
   function onMapBackgroundPointerDown(e: React.PointerEvent) {
     if (e.button !== 0) return;
     if (!placementMode || !svgRef.current || !activeStage) return;
     const raw = clientToSvgPoint(svgRef.current, e.clientX, e.clientY);
-    const p = clampToViewBox(vb, raw);
+    const pDisplay = clampToViewBox(vb, raw);
+    const p = stratStagePinToStoredAttack(vb, side, pDisplay);
     if (placementMode.kind === "agent") {
       const next: StratPlacedAgent = {
         id: newItemId(),
@@ -386,10 +392,11 @@ export function StratStageEditor({
           : { fill: "#94a3b8", stroke: "#fff" };
         const abbr = meta ? abbrevAgentName(meta.name) : a.agentSlug.slice(0, 2).toUpperCase();
         const sel = selectedId === a.id;
+        const pos = stratStagePinForDisplay(vb, side, { x: a.x, y: a.y });
         return (
           <g
             key={a.id}
-            transform={`translate(${a.x},${a.y})`}
+            transform={`translate(${pos.x},${pos.y})`}
             onPointerDown={(e) => {
               e.stopPropagation();
               if (placementMode) return;
@@ -401,8 +408,8 @@ export function StratStageEditor({
                 setDrag({
                   kind: "agent",
                   id: a.id,
-                  grabDx: o.x - a.x,
-                  grabDy: o.y - a.y,
+                  grabDx: o.x - pos.x,
+                  grabDy: o.y - pos.y,
                   pointerId: e.pointerId,
                 });
               }
@@ -425,10 +432,11 @@ export function StratStageEditor({
       {activeStage.abilities.map((ab) => {
         const st = abilitySlotStyle(ab.slot);
         const sel = selectedId === ab.id;
+        const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });
         return (
           <g
             key={ab.id}
-            transform={`translate(${ab.x},${ab.y})`}
+            transform={`translate(${pos.x},${pos.y})`}
             onPointerDown={(e) => {
               e.stopPropagation();
               if (placementMode) return;
@@ -440,8 +448,8 @@ export function StratStageEditor({
                 setDrag({
                   kind: "ability",
                   id: ab.id,
-                  grabDx: o.x - ab.x,
-                  grabDy: o.y - ab.y,
+                  grabDx: o.x - pos.x,
+                  grabDy: o.y - pos.y,
                   pointerId: e.pointerId,
                 });
               }

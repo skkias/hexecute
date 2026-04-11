@@ -76,5 +76,14 @@ export function sanitizeOverlayForSave(
     return { ...s, circle: c, points: [] };
   }
   const clamped = clampPointsToOutline(s.points, outer, holes);
+  if (s.kind === "rope" && clamped.length >= 2) {
+    return {
+      ...s,
+      points: clamped,
+      circle: null,
+      enter: clamped[0],
+      exit: clamped[clamped.length - 1],
+    };
+  }
   return { ...s, points: clamped, circle: null };
 }

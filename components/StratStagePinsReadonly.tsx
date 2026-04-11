@@ -2,7 +2,9 @@
 
 import { useMemo } from "react";
 import type { Agent } from "@/types/catalog";
-import type { StratStage } from "@/types/strat";
+import type { StratSide, StratStage } from "@/types/strat";
+import type { ViewBoxRect } from "@/lib/map-path";
+import { stratStagePinForDisplay } from "@/lib/strat-stage-coords";
 import { StratAgentMapPinSvg } from "@/components/StratAgentMapPinSvg";
 import {
   abbrevAgentName,
@@ -12,12 +14,16 @@ import {
 } from "@/lib/strat-stage-pin-styles";
 
 export function StratStagePinsReadonly({
+  vb,
   vbWidth,
+  side,
   stage,
   compSlugs,
   agentsCatalog,
 }: {
+  vb: ViewBoxRect;
   vbWidth: number;
+  side: StratSide;
   stage: StratStage;
   compSlugs: string[];
   agentsCatalog: Agent[];
@@ -63,8 +69,9 @@ export function StratStagePinsReadonly({
         const abbr = meta
           ? abbrevAgentName(meta.name)
           : a.agentSlug.slice(0, 2).toUpperCase();
+        const pos = stratStagePinForDisplay(vb, side, { x: a.x, y: a.y });
         return (
-          <g key={a.id} transform={`translate(${a.x},${a.y})`}>
+          <g key={a.id} transform={`translate(${pos.x},${pos.y})`}>
             <StratAgentMapPinSvg
               tokenR={tokenR}
               vbWidth={vbWidth}
@@ -81,8 +88,9 @@ export function StratStagePinsReadonly({
       })}
       {stage.abilities.map((ab) => {
         const st = abilitySlotStyle(ab.slot);
+        const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });
         return (
-          <g key={ab.id} transform={`translate(${ab.x},${ab.y})`}>
+          <g key={ab.id} transform={`translate(${pos.x},${pos.y})`}>
             <circle
               r={abilityR}
               fill={st.fill}

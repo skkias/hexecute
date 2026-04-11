@@ -42,6 +42,25 @@ const ANCHOR_CANDIDATES: MapLabelTextAnchor[] = [
   "bottom",
 ];
 
+/** Top↔bottom under reflection across the horizontal midline (defense mirror); left/right unchanged. */
+export function legacyTextAnchorAfterHorizontalMidlineFlip(
+  a: MapLabelTextAnchor,
+): MapLabelTextAnchor {
+  switch (a) {
+    case "top":
+      return "bottom";
+    case "bottom":
+      return "top";
+    default:
+      return a;
+  }
+}
+
+/** Reflection across horizontal midline: negate SVG rotation (y-down). */
+export function labelRotationAfterHorizontalMidlineFlip(deg: number): number {
+  return normalizeLabelRotationDeg(-normalizeLabelRotationDeg(deg));
+}
+
 /** Left↔right, top↔bottom — exact inverse offset under point reflection through viewBox center. */
 export function legacyTextAnchorAfterViewBoxCenterFlip(
   a: MapLabelTextAnchor,
@@ -152,6 +171,67 @@ export function transformLocationLabelForViewBoxCenterFlip(
     y: aF.y,
     text_anchor,
     text_rotation_deg: labelRotationAfterViewBoxCenterPointFlip(
+      l.text_rotation_deg ?? 0,
+    ),
+  };
+}
+
+/**
+ * After reflection across the horizontal midline (`path_def` vs `path_atk`), update label
+ * anchor position, `text_anchor`, and `text_rotation_deg`.
+ */
+export function transformLocationLabelForHorizontalMidlineFlip(
+  vb: ViewBoxRect,
+  vbWidth: number,
+  l: MapLocationLabel,
+): Pick<MapLocationLabel, "x" | "y" | "text_anchor" | "text_rotation_deg"> {
+  const fs = vbWidth * 0.026 * l.size;
+  const pinR = vbWidth * 0.014 * l.size * 0.55;
+  const textOnlyGap = Math.max(
+    fs * 0.35,
+    vbWidth * 0.014 * l.size * 0.45,
+  );
+  const isPin = l.style === "pin";
+  const layoutArgs = { pinR, fs, isPin, textOnlyGap };
+
+  const midY = vb.minY + vb.height / 2;
+  const flipY = (y: number) => 2 * midY - y;
+
+  const tp = mapLabelTextSvgProps(l.text_anchor, {
+    px: l.x,
+    py: l.y,
+    ...layoutArgs,
+  });
+
+  const tpF = { x: tp.x, y: flipY(tp.y) };
+  const aF = { x: l.x, y: flipY(l.y) };
+
+  const legacy = legacyTextAnchorAfterHorizontalMidlineFlip(l.text_anchor);
+  const tpLegacy = mapLabelTextSvgProps(legacy, {
+    px: aF.x,
+    py: aF.y,
+    ...layoutArgs,
+  });
+  const legacyErr =
+    (tpLegacy.x - tpF.x) ** 2 + (tpLegacy.y - tpF.y) ** 2;
+  const tol = Math.max(fs * fs * 1e-10, 1e-12);
+
+  let text_anchor: MapLabelTextAnchor =
+    legacyErr <= tol
+      ? legacy
+      : inferTextAnchorFromFlippedGeometry(
+          aF.x,
+          aF.y,
+          tpF.x,
+          tpF.y,
+          layoutArgs,
+        );
+
+  return {
+    x: aF.x,
+    y: aF.y,
+    text_anchor,
+    text_rotation_deg: labelRotationAfterHorizontalMidlineFlip(
       l.text_rotation_deg ?? 0,
     ),
   };

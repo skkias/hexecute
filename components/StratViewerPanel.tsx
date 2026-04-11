@@ -44,7 +44,9 @@ export function StratViewerPanel({
       embed={embed}
     >
       <StratStagePinsReadonly
+        vb={vb}
         vbWidth={vbWidth}
+        side={side}
         stage={stage}
         compSlugs={compSlugs}
         agentsCatalog={agentsCatalog}

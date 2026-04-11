@@ -58,6 +58,7 @@ import {
   insertPointOnEdge,
 } from "@/lib/point-segment";
 import { uploadMapReferenceImageAction } from "@/app/coach/map-actions";
+import { RopeOverlaySvg } from "@/components/RopeOverlaySvg";
 import {
   AlertCircle,
   ArrowDown,
@@ -254,7 +255,8 @@ function isOpenPolylineOverlayKind(kind: MapOverlayKind): boolean {
   return (
     kind === "grade" ||
     kind === "breakable_doorway" ||
-    kind === "toggle_door"
+    kind === "toggle_door" ||
+    kind === "rope"
   );
 }
 
@@ -284,6 +286,7 @@ const OVERLAY_KIND_ORDER: MapOverlayKind[] = [
   "grade",
   "breakable_doorway",
   "toggle_door",
+  "rope",
 ];
 
 function overlayPolygonStyle(
@@ -356,6 +359,8 @@ function overlayPassiveFill(
       return "rgba(16, 185, 129, 0.5)";
     case "toggle_door":
       return "rgba(99,102,241,0.5)";
+    case "rope":
+      return "rgba(245, 158, 11, 0.5)";
     default:
       return "rgba(253,224,71,0.45)";
   }
@@ -384,6 +389,8 @@ function overlayPassiveFillHover(
       return "rgba(52, 211, 153, 0.55)";
     case "toggle_door":
       return "rgba(129,140,248,0.55)";
+    case "rope":
+      return "rgba(251, 191, 36, 0.55)";
     default:
       return overlayPassiveFill(kind, floor);
   }
@@ -410,6 +417,8 @@ function overlayActiveVertexFill(
       return BREAKABLE_DOORWAY_VERTEX;
     case "toggle_door":
       return "rgb(165,180,252)";
+    case "rope":
+      return "rgb(251, 191, 36)";
     default:
       return "rgb(253,224,71)";
   }
@@ -2023,13 +2032,22 @@ export function MapShapeEditor({
           }
           return { ...s, circle: nc, points: [] };
         }
+        const flippedPts = clampPointsToOutline(
+          flipPointsThroughViewBoxCenter(rect, s.points),
+          nextOuter,
+          nextHoles,
+        );
+        if (s.kind === "rope" && flippedPts.length >= 2) {
+          return {
+            ...s,
+            points: flippedPts,
+            enter: flippedPts[0],
+            exit: flippedPts[flippedPts.length - 1],
+          };
+        }
         return {
           ...s,
-          points: clampPointsToOutline(
-            flipPointsThroughViewBoxCenter(rect, s.points),
-            nextOuter,
-            nextHoles,
-          ),
+          points: flippedPts,
           ...(s.kind === "grade" && gradeSide !== undefined
             ? { gradeHighSide: gradeSide }
             : {}),
@@ -2241,6 +2259,8 @@ export function MapShapeEditor({
               return "breakable doorway";
             case "toggle_door":
               return "toggle door";
+            case "rope":
+              return "rope / zipline";
             case "plant_site":
               return "plant site";
             default:
@@ -2600,6 +2620,17 @@ export function MapShapeEditor({
                     return (
                       <g key={sh.id} style={{ opacity: op }} pointerEvents="none">
                         <DoorwayOverlaySvg
+                          sh={sh}
+                          vbWidth={vb.width}
+                          highlight={hl}
+                        />
+                      </g>
+                    );
+                  }
+                  if (sh.kind === "rope") {
+                    return (
+                      <g key={sh.id} style={{ opacity: op }} pointerEvents="none">
+                        <RopeOverlaySvg
                           sh={sh}
                           vbWidth={vb.width}
                           highlight={hl}
@@ -3856,6 +3887,8 @@ export function MapShapeEditor({
                       <ArrowUpFromLine className="h-4 w-4 shrink-0 text-cyan-300" />
                     ) : kind === "breakable_doorway" ? (
                       <Hammer className="h-4 w-4 shrink-0 text-emerald-400" />
+                    ) : kind === "rope" ? (
+                      <ArrowDownUp className="h-4 w-4 shrink-0 text-amber-300" />
                     ) : (
                       <DoorClosed className="h-4 w-4 shrink-0 text-indigo-300" />
                     );
@@ -3872,7 +3905,9 @@ export function MapShapeEditor({
                               ? "Grade lines"
                               : kind === "breakable_doorway"
                                 ? "Breakable doorways"
-                                : "Toggle doors";
+                                : kind === "rope"
+                                  ? "Ropes / ziplines"
+                                  : "Toggle doors";
                   return (
                     <details
                       key={kind}
@@ -3907,9 +3942,11 @@ export function MapShapeEditor({
                                     ? "rounded-lg border border-emerald-500/40 bg-emerald-950/25 p-1"
                                     : activeOv && sh.kind === "toggle_door"
                                       ? "rounded-lg border border-indigo-500/40 bg-indigo-950/25 p-1"
-                                      : activeOv
-                                        ? "rounded-lg border border-amber-500/40 bg-amber-950/20 p-1"
-                                        : "";
+                                      : activeOv && sh.kind === "rope"
+                                        ? "rounded-lg border border-amber-500/45 bg-amber-950/30 p-1"
+                                        : activeOv
+                                          ? "rounded-lg border border-amber-500/40 bg-amber-950/20 p-1"
+                                          : "";
                           return (
                             <div
                               key={sh.id}
@@ -4081,6 +4118,20 @@ export function MapShapeEditor({
               >
                 <DoorClosed className="h-3.5 w-3.5" />
                 Toggle door
+              </button>
+              <button
+                type="button"
+                onClick={() => addOverlay("rope")}
+                disabled={!outlineReady}
+                title={
+                  outlineReady
+                    ? "Rope / zipline: first click = enter, next = exit (more clicks = path); Fracture-style vertical ropes"
+                    : "Define the map outline first"
+                }
+                className="btn-secondary inline-flex items-center gap-1 text-xs disabled:opacity-40"
+              >
+                <ArrowDownUp className="h-3.5 w-3.5" />
+                Rope / zipline
               </button>
             </div>
             {activeLayer.kind === "overlay" &&

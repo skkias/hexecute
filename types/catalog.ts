@@ -44,6 +44,11 @@ export type MapOverlayKind =
    * Open polyline for a door width; use `door_is_open` for swing vs closed slab.
    */
   | "toggle_door"
+  /**
+   * Rope / zipline (e.g. Fracture): open polyline; `enter` / `exit` are the endpoints
+   * (kept in sync with first/last vertex when saving).
+   */
+  | "rope"
   /** Closed polygon: bomb plant zone / plantable site outline. */
   | "plant_site";
 
@@ -72,6 +77,10 @@ export interface MapOverlayShape {
   gradeHighSide?: 1 | -1;
   /** For `toggle_door` only: visual open (dashed) vs closed (solid) door along the polyline. */
   door_is_open?: boolean;
+  /** For `rope` only: start / grab point (first vertex). */
+  enter?: MapPoint;
+  /** For `rope` only: end / landing point (last vertex). */
+  exit?: MapPoint;
 }
 
 /** Row from `public.maps` — reference art + vector outlines per side. */
