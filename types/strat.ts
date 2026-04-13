@@ -24,12 +24,23 @@ export interface StratPlacedAbility {
   rotationDeg?: number;
 }
 
+export type StratVisionConeWidth = "wide" | "thin";
+
+export interface StratPlacedVisionCone {
+  id: string;
+  x: number;
+  y: number;
+  rotationDeg: number;
+  width: StratVisionConeWidth;
+}
+
 export interface StratStage {
   id: string;
   title: string;
   notes: string;
   agents: StratPlacedAgent[];
   abilities: StratPlacedAbility[];
+  visionCones: StratPlacedVisionCone[];
   /** Saved map layer filters for this stage (viewer + coach). */
   mapLayerVisibility?: StratStageLayerVisibility;
   /** Used when leaving this stage for the next (ignored on the last stage). */

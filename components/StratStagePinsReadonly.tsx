@@ -27,6 +27,26 @@ import {
 } from "@/lib/strat-map-pin-scale";
 import { buildVisionLosContext } from "@/lib/vision-cone-los";
 
+function visionConeDisplayShape(
+  origin: { x: number; y: number },
+  vbWidth: number,
+  width: "wide" | "thin",
+  rotationDeg: number,
+  scale = 1,
+) {
+  const len = vbWidth * (width === "wide" ? 0.13 : 0.16) * scale;
+  const halfDeg = width === "wide" ? 52 : 28;
+  const base = (rotationDeg * Math.PI) / 180;
+  const left = base + (halfDeg * Math.PI) / 180;
+  const right = base - (halfDeg * Math.PI) / 180;
+  return {
+    lx: origin.x + Math.cos(left) * len,
+    ly: origin.y + Math.sin(left) * len,
+    rx: origin.x + Math.cos(right) * len,
+    ry: origin.y + Math.sin(right) * len,
+  };
+}
+
 export function StratStagePinsReadonly({
   gameMap,
   vb,
@@ -107,6 +127,26 @@ export function StratStagePinsReadonly({
 
   return (
     <g style={{ pointerEvents: "none" }}>
+      {stage.visionCones.map((cone) => {
+        const pos = stratStagePinForDisplay(vb, side, { x: cone.x, y: cone.y });
+        const sh = visionConeDisplayShape(
+          pos,
+          vbWidth,
+          cone.width,
+          cone.rotationDeg,
+          pinS,
+        );
+        return (
+          <polygon
+            key={cone.id}
+            points={`${pos.x},${pos.y} ${sh.lx},${sh.ly} ${sh.rx},${sh.ry}`}
+            fill="rgba(244,114,182,0.2)"
+            stroke="rgb(244,114,182)"
+            strokeWidth={Math.max(vbWidth * 0.0018, 0.8)}
+            strokeLinejoin="round"
+          />
+        );
+      })}
       {stage.abilities.map((ab) => {
         const st = abilitySlotStyle(ab.slot);
         const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });

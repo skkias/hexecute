@@ -104,14 +104,37 @@ export function StratModal({
     if (!activeStage) return [];
     return activeStage.abilities.map((ab) => {
       const meta = abilityMetaForSlot(abilityMetaBySlug, ab.agentSlug, ab.slot);
+      const agentName =
+        agentsCatalog.find((a) => a.slug === ab.agentSlug)?.name ?? ab.agentSlug;
       return {
         id: ab.id,
         agentSlug: ab.agentSlug,
+        agentName,
         slot: ab.slot.toUpperCase(),
         name: meta?.displayName ?? ab.slot.toUpperCase(),
       };
     });
-  }, [activeStage, abilityMetaBySlug]);
+  }, [activeStage, abilityMetaBySlug, agentsCatalog]);
+  const activeStageUtilityByAgent = useMemo(() => {
+    const groups = new Map<
+      string,
+      { agentSlug: string; agentName: string; abilities: typeof activeStageUtility }
+    >();
+    for (const u of activeStageUtility) {
+      const key = u.agentSlug;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.abilities.push(u);
+      } else {
+        groups.set(key, {
+          agentSlug: u.agentSlug,
+          agentName: u.agentName,
+          abilities: [u],
+        });
+      }
+    }
+    return [...groups.values()];
+  }, [activeStageUtility]);
 
   useLayoutEffect(() => {
     if (!strat) return;
@@ -305,22 +328,32 @@ export function StratModal({
                     </section>
                   )}
 
-                  {activeStageUtility.length > 0 && (
+                  {activeStageUtilityByAgent.length > 0 && (
                     <section>
                       <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-400/55">
                         Utility in this stage
                       </h3>
-                      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                        {activeStageUtility.map((u) => (
+                      <ul className="mt-3 space-y-2">
+                        {activeStageUtilityByAgent.map((group) => (
                           <li
-                            key={u.id}
-                            className="rounded-lg border border-violet-700/35 bg-slate-950/45 px-3 py-2 text-sm text-slate-100/90"
+                            key={group.agentSlug}
+                            className="rounded-lg border border-violet-700/35 bg-slate-950/45 px-3 py-2"
                           >
-                            <span className="font-semibold text-violet-200">{u.agentSlug}</span>
-                            <span className="text-violet-400/55"> · </span>
-                            <span className="text-cyan-200">{u.slot}</span>
-                            <span className="text-violet-400/55"> · </span>
-                            <span>{u.name}</span>
+                            <p className="text-sm font-semibold text-violet-200">
+                              {group.agentName}
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {group.abilities.map((u) => (
+                                <span
+                                  key={u.id}
+                                  className="rounded-md border border-violet-600/45 bg-slate-950/70 px-2 py-1 text-xs text-slate-100/90"
+                                >
+                                  <span className="text-cyan-200">{u.slot}</span>
+                                  <span className="text-violet-400/55"> · </span>
+                                  <span>{u.name}</span>
+                                </span>
+                              ))}
+                            </div>
                           </li>
                         ))}
                       </ul>

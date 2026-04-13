@@ -14,9 +14,11 @@ import type { Agent, GameMap } from "@/types/catalog";
 import type {
   StratPlacedAbility,
   StratPlacedAgent,
+  StratPlacedVisionCone,
   StratSide,
   StratStage,
   StratStageTransition,
+  StratVisionConeWidth,
 } from "@/types/strat";
 import { StratMapViewer } from "@/components/StratMapViewer";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
@@ -81,6 +83,11 @@ type PlacementMode =
       slot: StratPlacedAbility["slot"];
       /** First click stored (attack coords) when using origin + direction placement. */
       pendingOriginAttack?: { x: number; y: number };
+    }
+  | {
+      kind: "visionCone";
+      width: StratVisionConeWidth;
+      pendingOriginAttack?: { x: number; y: number };
     };
 
 type DragState =
@@ -110,6 +117,25 @@ type DragState =
       id: string;
       pointerId: number;
     }
+  | {
+      kind: "visionCone";
+      id: string;
+      grabDx: number;
+      grabDy: number;
+      pointerId: number;
+    }
+  | {
+      kind: "visionConeOrigin";
+      id: string;
+      grabDx: number;
+      grabDy: number;
+      pointerId: number;
+    }
+  | {
+      kind: "visionConeRotate";
+      id: string;
+      pointerId: number;
+    }
   | null;
 
 function newItemId(): string {
@@ -125,6 +151,30 @@ const TRANSITION_OPTIONS: { value: StratStageTransition; label: string }[] = [
   { value: "slide-left", label: "Slide from left" },
   { value: "slide-right", label: "Slide from right" },
 ];
+
+const VISION_CONE_TOKEN_COLOR = "rgb(244, 114, 182)";
+
+function visionConeDisplayShape(
+  origin: { x: number; y: number },
+  vbWidth: number,
+  width: StratVisionConeWidth,
+  rotationDeg: number,
+  scale = 1,
+) {
+  const len = vbWidth * (width === "wide" ? 0.13 : 0.16) * scale;
+  const halfDeg = width === "wide" ? 52 : 28;
+  const base = (rotationDeg * Math.PI) / 180;
+  const left = base + (halfDeg * Math.PI) / 180;
+  const right = base - (halfDeg * Math.PI) / 180;
+  const lx = origin.x + Math.cos(left) * len;
+  const ly = origin.y + Math.sin(left) * len;
+  const rx = origin.x + Math.cos(right) * len;
+  const ry = origin.y + Math.sin(right) * len;
+  const handleDist = len * 0.78;
+  const hx = origin.x + Math.cos(base) * handleDist;
+  const hy = origin.y + Math.sin(base) * handleDist;
+  return { lx, ly, rx, ry, hx, hy };
+}
 
 export function StratStageEditor({
   gameMap,
@@ -296,6 +346,13 @@ export function StratStageEditor({
     [patchStage],
   );
 
+  const setVisionCones = useCallback(
+    (index: number, visionCones: StratPlacedVisionCone[]) => {
+      patchStage(index, { visionCones });
+    },
+    [patchStage],
+  );
+
   const prevIndexRef = useRef(0);
 
   useLayoutEffect(() => {
@@ -364,11 +421,22 @@ export function StratStageEditor({
         activeStageIndex,
         activeStage.abilities.filter((a) => a.id !== id),
       );
+      setVisionCones(
+        activeStageIndex,
+        activeStage.visionCones.filter((v) => v.id !== id),
+      );
       setSelectedId(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedId, activeStage, activeStageIndex, setAgents, setAbilities]);
+  }, [
+    selectedId,
+    activeStage,
+    activeStageIndex,
+    setAgents,
+    setAbilities,
+    setVisionCones,
+  ]);
 
   useEffect(() => {
     if (!drag) return;
@@ -377,7 +445,7 @@ export function StratStageEditor({
       if (!svg || !activeStage) return;
       const raw = svgPointerToLogical(svg, e.clientX, e.clientY);
       const p =
-        drag.kind === "abilityRotate"
+        drag.kind === "abilityRotate" || drag.kind === "visionConeRotate"
           ? stratStagePinToStoredAttack(
               vb,
               side,
@@ -422,6 +490,30 @@ export function StratStageEditor({
             return { ...a, rotationDeg };
           }),
         );
+      } else if (drag.kind === "visionCone") {
+        setVisionCones(
+          activeStageIndex,
+          activeStage.visionCones.map((v) =>
+            v.id === drag.id ? { ...v, x: p.x, y: p.y } : v,
+          ),
+        );
+      } else if (drag.kind === "visionConeOrigin") {
+        setVisionCones(
+          activeStageIndex,
+          activeStage.visionCones.map((v) =>
+            v.id === drag.id ? { ...v, x: p.x, y: p.y } : v,
+          ),
+        );
+      } else if (drag.kind === "visionConeRotate") {
+        setVisionCones(
+          activeStageIndex,
+          activeStage.visionCones.map((v) => {
+            if (v.id !== drag.id) return v;
+            const rotationDeg =
+              (Math.atan2(p.y - v.y, p.x - v.x) * 180) / Math.PI;
+            return { ...v, rotationDeg };
+          }),
+        );
       }
     };
     const onUp = (e: PointerEvent) => {
@@ -444,6 +536,7 @@ export function StratStageEditor({
     side,
     setAgents,
     setAbilities,
+    setVisionCones,
     svgPointerToLogical,
   ]);
 
@@ -467,6 +560,32 @@ export function StratStageEditor({
         y: p.y,
       };
       setAgents(activeStageIndex, [...activeStage.agents, next]);
+      setPlacementMode(null);
+      setAbilityDirPreview(null);
+      setSelectedId(null);
+      return;
+    }
+
+    if (placementMode.kind === "visionCone") {
+      if (!placementMode.pendingOriginAttack) {
+        setPlacementMode({
+          kind: "visionCone",
+          width: placementMode.width,
+          pendingOriginAttack: { x: p.x, y: p.y },
+        });
+        setSelectedId(null);
+        return;
+      }
+      const o = placementMode.pendingOriginAttack;
+      const rotationDeg = (Math.atan2(p.y - o.y, p.x - o.x) * 180) / Math.PI;
+      const next: StratPlacedVisionCone = {
+        id: newItemId(),
+        x: o.x,
+        y: o.y,
+        rotationDeg,
+        width: placementMode.width,
+      };
+      setVisionCones(activeStageIndex, [...activeStage.visionCones, next]);
       setPlacementMode(null);
       setAbilityDirPreview(null);
       setSelectedId(null);
@@ -528,14 +647,16 @@ export function StratStageEditor({
     vbWidth,
     mapPinScale,
   );
-  const placementAbilityColor =
+  const placementPreviewColor =
     placementMode?.kind === "ability"
       ? (agentBlueprintForSlot(
           agentsCatalog,
           placementMode.slug,
           placementMode.slot,
         )?.color ?? "rgb(34,211,238)")
-      : "rgb(34,211,238)";
+      : placementMode?.kind === "visionCone"
+        ? VISION_CONE_TOKEN_COLOR
+        : "rgb(34,211,238)";
 
   const overlay = activeStage ? (
     <g style={{ pointerEvents: "auto" }}>
@@ -555,7 +676,9 @@ export function StratStageEditor({
         }}
         onPointerMove={(e) => {
           if (
-            placementMode?.kind !== "ability" ||
+            !placementMode ||
+            (placementMode.kind !== "ability" &&
+              placementMode.kind !== "visionCone") ||
             !placementMode.pendingOriginAttack ||
             !svgRef.current
           ) {
@@ -568,7 +691,8 @@ export function StratStageEditor({
         onPointerLeave={() => setAbilityDirPreview(null)}
         style={{
           cursor:
-            placementMode?.kind === "ability" &&
+            (placementMode?.kind === "ability" ||
+              placementMode?.kind === "visionCone") &&
             placementMode.pendingOriginAttack
               ? "crosshair"
               : placementMode
@@ -576,7 +700,8 @@ export function StratStageEditor({
                 : "default",
         }}
       />
-      {placementMode?.kind === "ability" &&
+      {(placementMode?.kind === "ability" ||
+        placementMode?.kind === "visionCone") &&
       placementMode.pendingOriginAttack &&
       abilityDirPreview ? (
         <line
@@ -590,13 +715,112 @@ export function StratStageEditor({
           }
           x2={abilityDirPreview.x}
           y2={abilityDirPreview.y}
-          stroke={placementAbilityColor}
+          stroke={placementPreviewColor}
           opacity={0.9}
           strokeWidth={Math.max(vbWidth * 0.0035, 1.5) * pinS}
           strokeDasharray="12 10"
           pointerEvents="none"
         />
       ) : null}
+      {activeStage.visionCones.map((cone) => {
+        const sel = selectedId === cone.id;
+        const pos = stratStagePinForDisplay(vb, side, { x: cone.x, y: cone.y });
+        const sh = visionConeDisplayShape(
+          pos,
+          vbWidth,
+          cone.width,
+          cone.rotationDeg,
+          pinS,
+        );
+        return (
+          <g key={cone.id}>
+            <polygon
+              points={`${pos.x},${pos.y} ${sh.lx},${sh.ly} ${sh.rx},${sh.ry}`}
+              fill="rgba(244,114,182,0.2)"
+              stroke={VISION_CONE_TOKEN_COLOR}
+              strokeWidth={Math.max(vbWidth * 0.0018, 0.8) * (sel ? 1.6 : 1)}
+              strokeLinejoin="round"
+              style={{ cursor: placementMode ? "default" : "grab" }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                if (placementMode) return;
+                setSelectedId(cone.id);
+                focusMapSvg();
+                const svg = svgRef.current;
+                if (!svg) return;
+                const o = svgPointerToLogical(svg, e.clientX, e.clientY);
+                setDrag({
+                  kind: "visionCone",
+                  id: cone.id,
+                  grabDx: o.x - pos.x,
+                  grabDy: o.y - pos.y,
+                  pointerId: e.pointerId,
+                });
+              }}
+            />
+            {sel ? (
+              <>
+                <line
+                  x1={pos.x}
+                  y1={pos.y}
+                  x2={sh.hx}
+                  y2={sh.hy}
+                  stroke={VISION_CONE_TOKEN_COLOR}
+                  opacity={0.75}
+                  strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
+                  strokeDasharray="6 5"
+                  pointerEvents="none"
+                />
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={Math.max(vbWidth * 0.0095, 4.5) * pinS}
+                  fill={VISION_CONE_TOKEN_COLOR}
+                  stroke="#faf5ff"
+                  strokeWidth={Math.max(vbWidth * 0.002, 1) * pinS}
+                  style={{ cursor: placementMode ? "default" : "grab", touchAction: "none" }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (placementMode) return;
+                    setSelectedId(cone.id);
+                    focusMapSvg();
+                    const svg = svgRef.current;
+                    if (!svg) return;
+                    const o = svgPointerToLogical(svg, e.clientX, e.clientY);
+                    setDrag({
+                      kind: "visionConeOrigin",
+                      id: cone.id,
+                      grabDx: o.x - pos.x,
+                      grabDy: o.y - pos.y,
+                      pointerId: e.pointerId,
+                    });
+                  }}
+                />
+                <circle
+                  cx={sh.hx}
+                  cy={sh.hy}
+                  r={Math.max(vbWidth * 0.0088, 4.2) * pinS}
+                  fill={VISION_CONE_TOKEN_COLOR}
+                  stroke="#faf5ff"
+                  strokeWidth={Math.max(vbWidth * 0.0019, 1) * pinS}
+                  style={{ cursor: placementMode ? "default" : "grab", touchAction: "none" }}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    if (placementMode) return;
+                    setSelectedId(cone.id);
+                    focusMapSvg();
+                    setDrag({
+                      kind: "visionConeRotate",
+                      id: cone.id,
+                      pointerId: e.pointerId,
+                    });
+                  }}
+                />
+              </>
+            ) : null}
+          </g>
+        );
+      })}
       {activeStage.abilities.map((ab) => {
         const st = abilitySlotStyle(ab.slot);
         const sel = selectedId === ab.id;
@@ -1056,6 +1280,21 @@ export function StratStageEditor({
                     <span className="text-violet-200">Placement mode:</span>{" "}
                     {placementMode.kind === "agent" ? (
                       <>click the map to drop an agent token ({placementMode.slug}).</>
+                    ) : placementMode.kind === "visionCone" ? (
+                      placementMode.pendingOriginAttack ? (
+                        <>
+                          Second click:{" "}
+                          <strong className="text-violet-200">face</strong> the{" "}
+                          {placementMode.width === "wide" ? "wide" : "thin"}{" "}
+                          vision cone.
+                        </>
+                      ) : (
+                        <>
+                          Click the map for{" "}
+                          <strong className="text-violet-200">origin</strong>, then
+                          again for direction ({placementMode.width} cone).
+                        </>
+                      )
                     ) : placementMode.pendingOriginAttack ? (
                       <>
                         Second click: <strong className="text-violet-200">face</strong>{" "}
@@ -1100,9 +1339,10 @@ export function StratStageEditor({
                   <>
                     Choose <strong className="text-slate-200">agent name</strong>{" "}
                     or a <strong className="text-slate-200">Q/E/C/X</strong> chip,
+                    or a <strong className="text-slate-200">vision cone</strong>,
                     then click the map. Drag pins to adjust; select a pin — the map
-                    grabs focus — then Delete or Backspace removes it (Escape
-                    clears selection).{" "}
+                    grabs focus — then Delete or Backspace removes it (Escape clears
+                    selection).{" "}
                     {
                       "Ability chips follow each agent's coach blueprint when set."
                     }
@@ -1115,9 +1355,53 @@ export function StratStageEditor({
                   letters still work.
                 </p>
               ) : null}
+              <div className="mt-3 rounded-md border border-violet-800/30 bg-slate-950/35 p-2">
+                <p className="text-[11px] font-medium text-violet-300/80">
+                  Vision cones
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPlacementMode((m) =>
+                        m?.kind === "visionCone" && m.width === "wide"
+                          ? null
+                          : { kind: "visionCone", width: "wide" },
+                      )
+                    }
+                    className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                      placementMode?.kind === "visionCone" &&
+                      placementMode.width === "wide"
+                        ? "border-fuchsia-400 bg-fuchsia-950/60 text-white"
+                        : "border-violet-800/45 bg-slate-950/60 text-violet-200"
+                    }`}
+                  >
+                    Wide vision cone
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPlacementMode((m) =>
+                        m?.kind === "visionCone" && m.width === "thin"
+                          ? null
+                          : { kind: "visionCone", width: "thin" },
+                      )
+                    }
+                    className={`rounded-md border px-2 py-1 text-xs font-medium ${
+                      placementMode?.kind === "visionCone" &&
+                      placementMode.width === "thin"
+                        ? "border-fuchsia-400 bg-fuchsia-950/60 text-white"
+                        : "border-violet-800/45 bg-slate-950/60 text-violet-200"
+                    }`}
+                  >
+                    Thin vision cone
+                  </button>
+                </div>
+              </div>
               {roster.length === 0 ? (
                 <p className="mt-2 text-xs text-amber-200/80">
-                  Fill the five agents in the comp (Details tab) to enable tokens.
+                  Fill the five agents in the comp (Details tab) to enable agent
+                  tokens and ability chips.
                 </p>
               ) : (
                 <div className="mt-3 flex flex-wrap gap-3">
