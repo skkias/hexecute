@@ -35,6 +35,12 @@ import {
   snapBlueprintPoint,
 } from "@/lib/blueprint-canvas-snap";
 import { viewBoxRectFromMap } from "@/lib/strat-map-display";
+import {
+  blueprintStratAnchor,
+  defaultStratPlacementForShape,
+  effectiveStratPlacementMode,
+} from "@/lib/strat-blueprint-anchor";
+import type { StratPlacementMode } from "@/types/agent-ability";
 
 const VB = BLUEPRINT_CANVAS_SIZE;
 const VB_STR = `0 0 ${VB} ${VB}`;
@@ -71,6 +77,11 @@ const SHAPE_OPTIONS: { value: AgentAbilityShapeKind; label: string; hint: string
     { value: "polygon", label: "Polygon zone", hint: "Trap field, floor" },
     { value: "rectangle", label: "Rectangle", hint: "Aligned box" },
     { value: "arc", label: "Arc", hint: "Shock arc, curved utility" },
+    {
+      value: "movement",
+      label: "Movement range",
+      hint: "Teleport / dash max vector (A→B)",
+    },
   ];
 
 function newId(): string {
@@ -104,6 +115,17 @@ function buildGeometry(
     const a = pts[0]!;
     const b = pts[1]!;
     return { kind: "ray", x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+  }
+  if (kind === "movement" && pts.length >= 2) {
+    const a = pts[0]!;
+    const b = pts[1]!;
+    return {
+      kind: "movement",
+      ax: a.x,
+      ay: a.y,
+      bx: b.x,
+      by: b.y,
+    };
   }
   if (kind === "cone" && pts.length >= 3) {
     const o = pts[0]!;
@@ -285,6 +307,32 @@ function AbilityShapePreview({
           />
         </g>
       );
+    case "movement": {
+      const m = g;
+      return (
+        <g opacity={op}>
+          <line
+            x1={m.ax}
+            y1={m.ay}
+            x2={m.bx}
+            y2={m.by}
+            stroke={stroke}
+            strokeWidth={sw * 2}
+            strokeLinecap="round"
+            strokeDasharray={`${VB * 0.02} ${VB * 0.014}`}
+          />
+          <circle cx={m.ax} cy={m.ay} r={VB * 0.014} fill={stroke} stroke="#fff" strokeWidth={sw} />
+          <circle
+            cx={m.bx}
+            cy={m.by}
+            r={VB * 0.011}
+            fill={`${b.color}55`}
+            stroke={stroke}
+            strokeWidth={sw * 0.85}
+          />
+        </g>
+      );
+    }
     default:
       return null;
   }
@@ -316,6 +364,8 @@ function placementHint(kind: AgentAbilityShapeKind): string {
       return "Click two opposite corners.";
     case "arc":
       return "Click center, a point on the arc (radius), then end direction.";
+    case "movement":
+      return "Click start (from), then end (max range).";
     default:
       return "";
   }
@@ -328,6 +378,7 @@ function pointsDoneCount(kind: AgentAbilityShapeKind): number {
     case "circle":
     case "ray":
     case "rectangle":
+    case "movement":
       return 2;
     case "cone":
     case "arc":
@@ -360,6 +411,7 @@ function placementProgressLine(
     polygon: ["", "", ""],
     rectangle: ["1/2 — one corner", "2/2 — opposite corner", ""],
     arc: ["1/3 — arc center", "2/3 — radius & start", "3/3 — arc direction"],
+    movement: ["1/2 — range from", "2/2 — range to", ""],
   };
   const row = labels[kind];
   const line =
@@ -447,6 +499,12 @@ export function AgentAbilityEditor({
     [abilities, selectedId],
   );
 
+  useEffect(() => {
+    if (selectedId && !abilities.some((a) => a.id === selectedId)) {
+      setSelectedId(abilities[0]?.id ?? null);
+    }
+  }, [abilities, selectedId]);
+
   const startPlacement = useCallback(() => {
     const name = draftName.trim() || "Ability";
     setCursorBp(null);
@@ -511,6 +569,7 @@ export function AgentAbilityEditor({
         shapeKind: placement.shapeKind,
         color: placement.color,
         geometry: geo,
+        stratPlacementMode: defaultStratPlacementForShape(placement.shapeKind),
       };
       setAbilities((a) => [...a, next]);
       setSelectedId(next.id);
@@ -558,6 +617,31 @@ export function AgentAbilityEditor({
             ? { ...b, geometry: geo, shapeKind: geo.kind }
             : b,
         ),
+      );
+    },
+    [selectedId],
+  );
+
+  const updateSelectedBlueprintMeta = useCallback(
+    (patch: Partial<Pick<AgentAbilityBlueprint, "origin" | "stratPlacementMode">>) => {
+      if (!selectedId) return;
+      setAbilities((list) =>
+        list.map((b) => {
+          if (b.id !== selectedId) return b;
+          const n = { ...b };
+          if ("origin" in patch) {
+            if (patch.origin === undefined) delete n.origin;
+            else n.origin = patch.origin;
+          }
+          if ("stratPlacementMode" in patch) {
+            if (patch.stratPlacementMode === undefined) {
+              delete n.stratPlacementMode;
+            } else {
+              n.stratPlacementMode = patch.stratPlacementMode;
+            }
+          }
+          return n;
+        }),
       );
     },
     [selectedId],
@@ -696,10 +780,10 @@ export function AgentAbilityEditor({
             </select>
           </div>
           <p className="text-xs leading-relaxed text-violet-400/70">
-            After you save a shape, select it in the list and{" "}
-            <strong className="text-violet-200/85">drag the colored dots</strong> on the
-            canvas to resize and move — no need to type coordinates. While placing a new
-            shape, move the pointer to preview circles, lines, and wedges before you click.
+            The canvas shows <strong className="text-violet-200/85">one ability at a time</strong>
+            — the one selected in the list. After you save a shape, select it and{" "}
+            <strong className="text-violet-200/85">drag the colored dots</strong> to resize and
+            move. While placing a new shape, move the pointer to preview before you click.
           </p>
           <div className="overflow-hidden rounded-xl border border-violet-500/25 bg-slate-950/80">
             <svg
@@ -758,19 +842,48 @@ export function AgentAbilityEditor({
                 Blueprint space {VB}×{VB} units — major grid 100 · full canvas edge ={" "}
                 {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of map width (linear)
               </text>
-              {abilities.map((b) => (
+              {selected && !placement ? (
                 <g
-                  key={b.id}
-                  pointerEvents={placement ? "none" : "auto"}
+                  pointerEvents="auto"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedId(b.id);
                   }}
-                  style={{ cursor: placement ? "default" : "pointer" }}
                 >
-                  <AbilityShapePreview b={b} dimmed={selectedId !== b.id} />
+                  <AbilityShapePreview b={selected} />
+                  {(() => {
+                    const { x, y } = blueprintStratAnchor(selected);
+                    const w = VB * 0.024;
+                    return (
+                      <g pointerEvents="none" opacity={0.95}>
+                        <line
+                          x1={x - w}
+                          y1={y}
+                          x2={x + w}
+                          y2={y}
+                          stroke="rgb(250, 204, 21)"
+                          strokeWidth={VB * 0.003}
+                        />
+                        <line
+                          x1={x}
+                          y1={y - w}
+                          x2={x}
+                          y2={y + w}
+                          stroke="rgb(250, 204, 21)"
+                          strokeWidth={VB * 0.003}
+                        />
+                        <circle
+                          cx={x}
+                          cy={y}
+                          r={VB * 0.006}
+                          fill="rgb(250, 204, 21)"
+                          stroke="rgb(15,23,42)"
+                          strokeWidth={VB * 0.0015}
+                        />
+                      </g>
+                    );
+                  })()}
                 </g>
-              ))}
+              ) : null}
               <BlueprintPlacementPreview
                 placement={placement}
                 cursorBp={cursorBp}
@@ -888,8 +1001,8 @@ export function AgentAbilityEditor({
             </div>
           ) : (
             <p className="text-xs text-violet-400/55">
-              Click the canvas after “Start placement”. Select a saved ability to show drag
-              handles. Keys:{" "}
+              Click the canvas after “Start placement”. Select a saved ability to edit it on
+              the canvas (only that one is drawn). Keys:{" "}
               <kbd className="rounded border border-violet-700/50 bg-slate-900 px-1">Esc</kbd>{" "}
               cancel placement,{" "}
               <kbd className="rounded border border-violet-700/50 bg-slate-900 px-1">
@@ -1062,6 +1175,89 @@ export function AgentAbilityEditor({
                     </p>
                   );
                 })()}
+                <div className="space-y-2 rounded-md border border-amber-900/35 bg-slate-950/45 p-2.5">
+                  <h4 className="text-[11px] font-semibold text-amber-100/90">
+                    Strat map anchor
+                  </h4>
+                  <p className="text-[10px] leading-snug text-violet-400/80">
+                    Yellow cross = where the pin sits and rotation pivot. Default is the
+                    shape&apos;s bbox center; set origin below to move the pivot in blueprint
+                    space (e.g. cone tip, rectangle corner).
+                  </p>
+                  {(() => {
+                    const a = blueprintStratAnchor(selected);
+                    const ox = selected.origin?.x ?? a.x;
+                    const oy = selected.origin?.y ?? a.y;
+                    const mode = effectiveStratPlacementMode(selected);
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="block text-[10px] text-violet-400/90">
+                            Origin X (bp)
+                            <input
+                              type="number"
+                              step="any"
+                              value={Math.round(ox * 1000) / 1000}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                if (Number.isFinite(v)) {
+                                  updateSelectedBlueprintMeta({
+                                    origin: { x: v, y: oy },
+                                  });
+                                }
+                              }}
+                              className="input-field mt-0.5 w-full font-mono text-xs"
+                            />
+                          </label>
+                          <label className="block text-[10px] text-violet-400/90">
+                            Origin Y (bp)
+                            <input
+                              type="number"
+                              step="any"
+                              value={Math.round(oy * 1000) / 1000}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                if (Number.isFinite(v)) {
+                                  updateSelectedBlueprintMeta({
+                                    origin: { x: ox, y: v },
+                                  });
+                                }
+                              }}
+                              className="input-field mt-0.5 w-full font-mono text-xs"
+                            />
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-secondary w-full py-1 text-[11px]"
+                          onClick={() => updateSelectedBlueprintMeta({ origin: undefined })}
+                        >
+                          Reset origin to bbox center
+                        </button>
+                        <label className="block text-[10px] text-violet-400/90">
+                          Placement on strats
+                          <select
+                            value={mode}
+                            onChange={(e) =>
+                              updateSelectedBlueprintMeta({
+                                stratPlacementMode: e.target
+                                  .value as StratPlacementMode,
+                              })
+                            }
+                            className="input-field mt-0.5 w-full text-xs"
+                          >
+                            <option value="center">
+                              One click — pin at anchor (no facing)
+                            </option>
+                            <option value="origin_direction">
+                              Two clicks — origin, then aim direction
+                            </option>
+                          </select>
+                        </label>
+                      </>
+                    );
+                  })()}
+                </div>
                 <BlueprintGeometryFields
                   geometry={selected.geometry}
                   onChange={updateSelectedGeometry}
@@ -1091,10 +1287,11 @@ export function AgentAbilityEditor({
           Map preview (same scale as strat designer)
         </h3>
         <p className="mt-1 text-xs leading-relaxed text-violet-300/65">
-          Overlay the selected blueprint on a real map. Same linear scale as strat pins:
-          the {BLUEPRINT_CANVAS_SIZE} bp canvas spans{" "}
-          {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of map width; the shape is
-          centered on the anchor.
+          Overlay the selected blueprint on a real map. Same linear scale as strat pins: the{" "}
+          {BLUEPRINT_CANVAS_SIZE} bp canvas spans{" "}
+          {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of map width. The blueprint is
+          anchored at the yellow pivot (origin); use{" "}
+          <strong className="text-violet-200/85">Rotate test</strong> to preview facing.
         </p>
         {maps.length === 0 ? (
           <p className="mt-3 text-sm text-amber-200/80">

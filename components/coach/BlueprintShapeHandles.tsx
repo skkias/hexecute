@@ -165,6 +165,13 @@ export function BlueprintShapeHandles({
           {handleEl(geom.x2, geom.y2, "ray-b", geom)}
         </g>
       );
+    case "movement":
+      return (
+        <g style={{ pointerEvents: "auto" }} data-blueprint-handles>
+          {handleEl(geom.ax, geom.ay, "mov-a", geom)}
+          {handleEl(geom.bx, geom.by, "mov-b", geom)}
+        </g>
+      );
     case "cone":
       return (
         <g style={{ pointerEvents: "auto" }} data-blueprint-handles>
@@ -248,6 +255,26 @@ function computeDraggedGeometry(
         return { kind: "ray", x1: p.x, y1: p.y, x2: g.x2, y2: g.y2 };
       if (handleId === "ray-b")
         return { kind: "ray", x1: g.x1, y1: g.y1, x2: p.x, y2: p.y };
+      return null;
+    }
+    case "movement": {
+      const src = liveGeom.kind === "movement" ? liveGeom : g;
+      if (handleId === "mov-a")
+        return {
+          kind: "movement",
+          ax: p.x,
+          ay: p.y,
+          bx: src.bx,
+          by: src.by,
+        };
+      if (handleId === "mov-b")
+        return {
+          kind: "movement",
+          ax: src.ax,
+          ay: src.ay,
+          bx: p.x,
+          by: p.y,
+        };
       return null;
     }
     case "cone": {

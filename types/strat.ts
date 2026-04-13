@@ -17,6 +17,11 @@ export interface StratPlacedAbility {
   slot: "q" | "e" | "c" | "x";
   x: number;
   y: number;
+  /**
+   * Rotation in degrees: blueprint +X axis aligns with this heading on the map (origin placement).
+   * Omitted → 0.
+   */
+  rotationDeg?: number;
 }
 
 export interface StratStage {

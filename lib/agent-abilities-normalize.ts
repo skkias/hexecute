@@ -3,6 +3,7 @@ import type {
   AgentAbilityGeometry,
   AgentAbilityShapeKind,
   AgentAbilitySlot,
+  StratPlacementMode,
 } from "@/types/agent-ability";
 import type { MapPoint } from "@/lib/map-path";
 
@@ -17,6 +18,12 @@ const SHAPE_KINDS: AgentAbilityShapeKind[] = [
   "polygon",
   "rectangle",
   "arc",
+  "movement",
+];
+
+const STRAT_PLACEMENT: ("center" | "origin_direction")[] = [
+  "center",
+  "origin_direction",
 ];
 
 const CANVAS = 1000;
@@ -141,6 +148,15 @@ function normalizeGeometry(
       sweepDeg: Number.isFinite(Number(o.sweepDeg)) ? Number(o.sweepDeg) : 90,
     };
   }
+  if (k === "movement" && shapeKind === "movement") {
+    return {
+      kind: "movement",
+      ax: clamp(Number(o.ax)),
+      ay: clamp(Number(o.ay)),
+      bx: clamp(Number(o.bx)),
+      by: clamp(Number(o.by)),
+    };
+  }
   return null;
 }
 
@@ -182,9 +198,35 @@ function defaultGeometry(kind: AgentAbilityShapeKind): AgentAbilityGeometry {
         startDeg: -60,
         sweepDeg: 120,
       };
+    case "movement":
+      return {
+        kind: "movement",
+        ax: 420,
+        ay: 500,
+        bx: 580,
+        by: 500,
+      };
     default:
       return { kind: "point", x: 500, y: 500 };
   }
+}
+
+function normalizeOrigin(
+  raw: unknown,
+): { x: number; y: number } | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const x = clamp(Number(o.x));
+  const y = clamp(Number(o.y));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  return { x, y };
+}
+
+function normalizeStratPlacementMode(raw: unknown): StratPlacementMode | undefined {
+  return typeof raw === "string" &&
+    STRAT_PLACEMENT.includes(raw as StratPlacementMode)
+    ? (raw as StratPlacementMode)
+    : undefined;
 }
 
 export function normalizeAgentAbilityBlueprint(raw: unknown): AgentAbilityBlueprint | null {
@@ -200,7 +242,21 @@ export function normalizeAgentAbilityBlueprint(raw: unknown): AgentAbilityBluepr
   if (!geometry) {
     geometry = defaultGeometry(shapeKind);
   }
-  return { id, slot, name, shapeKind, color, geometry };
+  const origin = normalizeOrigin(o.origin);
+  const stratPlacementMode = normalizeStratPlacementMode(
+    o.stratPlacementMode ?? o.strat_placement_mode,
+  );
+  const base: AgentAbilityBlueprint = {
+    id,
+    slot,
+    name,
+    shapeKind,
+    color,
+    geometry,
+  };
+  if (origin) base.origin = origin;
+  if (stratPlacementMode) base.stratPlacementMode = stratPlacementMode;
+  return base;
 }
 
 export function normalizeAgentAbilitiesBlueprint(raw: unknown): AgentAbilityBlueprint[] {

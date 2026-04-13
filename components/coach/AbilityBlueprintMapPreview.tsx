@@ -34,6 +34,8 @@ export function AbilityBlueprintMapPreview({
   const [side, setSide] = useState<StratSide>("atk");
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const [draggingAnchor, setDraggingAnchor] = useState(false);
+  /** Map-test rotation only (degrees); does not change saved blueprint. */
+  const [previewRotationDeg, setPreviewRotationDeg] = useState(0);
 
   const mapSvgRef = useRef<SVGSVGElement | null>(null);
 
@@ -60,7 +62,12 @@ export function AbilityBlueprintMapPreview({
 
   useEffect(() => {
     setAnchor(null);
+    setPreviewRotationDeg(0);
   }, [gameMap.id, side]);
+
+  useEffect(() => {
+    setPreviewRotationDeg(0);
+  }, [blueprint?.id]);
 
   const pos = anchor ?? defaultAnchor;
 
@@ -137,6 +144,31 @@ export function AbilityBlueprintMapPreview({
         >
           Center anchor
         </button>
+        <label className="inline-flex items-center gap-2">
+          <span className="text-violet-500/90">Rotate test</span>
+          <input
+            type="range"
+            min={-180}
+            max={180}
+            step={1}
+            value={previewRotationDeg}
+            onChange={(e) =>
+              setPreviewRotationDeg(Number(e.target.value) || 0)
+            }
+            className="w-28 accent-cyan-500 md:w-36"
+            aria-label="Preview rotation in degrees"
+          />
+          <span className="w-8 font-mono text-violet-300/90">
+            {previewRotationDeg}°
+          </span>
+          <button
+            type="button"
+            className="btn-secondary py-0.5 px-1.5 text-[10px]"
+            onClick={() => setPreviewRotationDeg(0)}
+          >
+            0°
+          </button>
+        </label>
       </div>
 
       <StratMapViewer
@@ -160,6 +192,7 @@ export function AbilityBlueprintMapPreview({
               mapX={pos.x}
               mapY={pos.y}
               vbWidth={vb.width}
+              rotationDeg={previewRotationDeg}
               pointerEvents="auto"
             />
           </g>
@@ -199,7 +232,9 @@ export function AbilityBlueprintMapPreview({
           <strong className="text-violet-300/85">Drag</strong> the blueprint on the map to
           move the anchor (same coordinate space as strat ability pins). Pan/zoom with the
           viewer; anchor is in logical map units ({round4(vb.minX)}…{round4(vb.minX + vb.width)}{" "}
-          × {round4(vb.minY)}…{round4(vb.minY + vb.height)}).
+          × {round4(vb.minY)}…{round4(vb.minY + vb.height)}). Use{" "}
+          <strong className="text-violet-300/85">Rotate test</strong> to see how origin-facing
+          strats will read (matches strat placement rotation).
         </p>
       </div>
     </div>

@@ -81,7 +81,11 @@ function normalizeAbility(raw: unknown): StratPlacedAbility | null {
   if (!agentSlug || !slot) return null;
   const x = isFiniteNum(o.x) ? o.x : 0;
   const y = isFiniteNum(o.y) ? o.y : 0;
-  return { id, agentSlug, slot, x, y };
+  const rotRaw = o.rotationDeg ?? o.rotation_deg;
+  const rotationDeg = isFiniteNum(rotRaw) ? rotRaw : undefined;
+  const out: StratPlacedAbility = { id, agentSlug, slot, x, y };
+  if (rotationDeg !== undefined) out.rotationDeg = rotationDeg;
+  return out;
 }
 
 function normalizeStage(raw: unknown, index: number): StratStage {

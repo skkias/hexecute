@@ -124,6 +124,24 @@ export function BlueprintPlacementPreview({
     );
   }
 
+  if (kind === "movement" && pts.length === 1) {
+    const p0 = pts[0]!;
+    return (
+      <g pointerEvents="none" opacity={0.8}>
+        <line
+          x1={p0.x}
+          y1={p0.y}
+          x2={c.x}
+          y2={c.y}
+          stroke="rgb(192, 132, 252)"
+          strokeWidth={sw * 2}
+          strokeLinecap="round"
+          strokeDasharray={dash}
+        />
+      </g>
+    );
+  }
+
   if (kind === "cone") {
     if (pts.length === 1) {
       const o = pts[0]!;

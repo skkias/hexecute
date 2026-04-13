@@ -100,6 +100,7 @@ export function StratStagePinsReadonly({
                 mapX={pos.x}
                 mapY={pos.y}
                 vbWidth={vbWidth}
+                rotationDeg={ab.rotationDeg ?? 0}
                 pointerEvents="none"
               />
             ) : (

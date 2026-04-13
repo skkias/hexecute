@@ -13,6 +13,7 @@ export type AgentAbilitySlot = "q" | "e" | "c" | "x";
  * - polygon: trap floor, molly pool, site control zone
  * - rectangle: aligned box (resizable)
  * - arc: curved utility arc (Sova shock style)
+ * - movement: teleport / dash max range (segment A→B in blueprint space)
  */
 export type AgentAbilityShapeKind =
   | "point"
@@ -22,7 +23,11 @@ export type AgentAbilityShapeKind =
   | "polyline"
   | "polygon"
   | "rectangle"
-  | "arc";
+  | "arc"
+  | "movement";
+
+/** How this blueprint is dropped on the strat map. */
+export type StratPlacementMode = "center" | "origin_direction";
 
 /** All coordinates are in blueprint canvas space (default viewBox 0 0 1000 1000). */
 export type AgentAbilityGeometry =
@@ -59,7 +64,11 @@ export type AgentAbilityGeometry =
       r: number;
       startDeg: number;
       sweepDeg: number;
-    };
+    }
+  /**
+   * Movement / teleport range: segment from A to B (max displacement vector in blueprint space).
+   */
+  | { kind: "movement"; ax: number; ay: number; bx: number; by: number };
 
 export interface AgentAbilityBlueprint {
   id: string;
@@ -70,4 +79,14 @@ export interface AgentAbilityBlueprint {
   /** Stroke/fill accent (CSS color). */
   color: string;
   geometry: AgentAbilityGeometry;
+  /**
+   * Blueprint-space pivot: this point is placed on the strat map; rotation turns around it.
+   * Omitted → bbox center of `geometry`.
+   */
+  origin?: { x: number; y: number };
+  /**
+   * Strat placement: single click at center, or origin click + direction (second click).
+   * Omitted → sensible default by shape (see `effectiveStratPlacementMode`).
+   */
+  stratPlacementMode?: StratPlacementMode;
 }

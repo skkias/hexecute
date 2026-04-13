@@ -233,6 +233,93 @@ export function BlueprintGeometryFields({
           </Row>
         </>
       );
+    case "movement":
+      return (
+        <>
+          <p className="mb-1 text-[10px] uppercase tracking-wide text-violet-500/80">
+            From (start)
+          </p>
+          <Row>
+            <label className="block text-[11px] text-violet-400/90">
+              ax
+              <input
+                type="number"
+                step="any"
+                value={g.ax}
+                onChange={(e) =>
+                  onChange({
+                    kind: "movement",
+                    ax: clampCoord(Number.parseFloat(e.target.value)),
+                    ay: g.ay,
+                    bx: g.bx,
+                    by: g.by,
+                  })
+                }
+                className={fieldCls()}
+              />
+            </label>
+            <label className="block text-[11px] text-violet-400/90">
+              ay
+              <input
+                type="number"
+                step="any"
+                value={g.ay}
+                onChange={(e) =>
+                  onChange({
+                    kind: "movement",
+                    ax: g.ax,
+                    ay: clampCoord(Number.parseFloat(e.target.value)),
+                    bx: g.bx,
+                    by: g.by,
+                  })
+                }
+                className={fieldCls()}
+              />
+            </label>
+          </Row>
+          <p className="mb-1 mt-2 text-[10px] uppercase tracking-wide text-violet-500/80">
+            To (max range)
+          </p>
+          <Row>
+            <label className="block text-[11px] text-violet-400/90">
+              bx
+              <input
+                type="number"
+                step="any"
+                value={g.bx}
+                onChange={(e) =>
+                  onChange({
+                    kind: "movement",
+                    ax: g.ax,
+                    ay: g.ay,
+                    bx: clampCoord(Number.parseFloat(e.target.value)),
+                    by: g.by,
+                  })
+                }
+                className={fieldCls()}
+              />
+            </label>
+            <label className="block text-[11px] text-violet-400/90">
+              by
+              <input
+                type="number"
+                step="any"
+                value={g.by}
+                onChange={(e) =>
+                  onChange({
+                    kind: "movement",
+                    ax: g.ax,
+                    ay: g.ay,
+                    bx: g.bx,
+                    by: clampCoord(Number.parseFloat(e.target.value)),
+                  })
+                }
+                className={fieldCls()}
+              />
+            </label>
+          </Row>
+        </>
+      );
     case "cone":
       return (
         <>

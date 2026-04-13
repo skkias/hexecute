@@ -44,11 +44,18 @@ import {
   stratStagePinForDisplay,
   stratStagePinToStoredAttack,
 } from "@/lib/strat-stage-coords";
+import { effectiveStratPlacementMode } from "@/lib/strat-blueprint-anchor";
 
 type PlacementMode =
   | null
   | { kind: "agent"; slug: string }
-  | { kind: "ability"; slug: string; slot: StratPlacedAbility["slot"] };
+  | {
+      kind: "ability";
+      slug: string;
+      slot: StratPlacedAbility["slot"];
+      /** First click stored (attack coords) when using origin + direction placement. */
+      pendingOriginAttack?: { x: number; y: number };
+    };
 
 type DragState =
   | {
@@ -113,6 +120,10 @@ export function StratStageEditor({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [activeStageIndex, setActiveStageIndex] = useState(0);
   const [placementMode, setPlacementMode] = useState<PlacementMode>(null);
+  /** Display-space end point while choosing ability facing (second click). */
+  const [abilityDirPreview, setAbilityDirPreview] = useState<MapPoint | null>(
+    null,
+  );
   const [drag, setDrag] = useState<DragState>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mapAnim, setMapAnim] = useState<{
@@ -285,6 +296,7 @@ export function StratStageEditor({
         }
         e.preventDefault();
         setSelectedId(null);
+        setAbilityDirPreview(null);
         setPlacementMode(null);
         return;
       }
@@ -379,17 +391,59 @@ export function StratStageEditor({
         y: p.y,
       };
       setAgents(activeStageIndex, [...activeStage.agents, next]);
-    } else {
+      setPlacementMode(null);
+      setAbilityDirPreview(null);
+      setSelectedId(null);
+      return;
+    }
+
+    const bp = agentBlueprintForSlot(
+      agentsCatalog,
+      placementMode.slug,
+      placementMode.slot,
+    );
+    const placeMode = bp
+      ? effectiveStratPlacementMode(bp)
+      : "center";
+
+    if (placeMode === "origin_direction") {
+      if (!placementMode.pendingOriginAttack) {
+        setPlacementMode({
+          kind: "ability",
+          slug: placementMode.slug,
+          slot: placementMode.slot,
+          pendingOriginAttack: { x: p.x, y: p.y },
+        });
+        setSelectedId(null);
+        return;
+      }
+      const o = placementMode.pendingOriginAttack;
+      const rotationDeg = (Math.atan2(p.y - o.y, p.x - o.x) * 180) / Math.PI;
       const next: StratPlacedAbility = {
         id: newItemId(),
         agentSlug: placementMode.slug,
         slot: placementMode.slot,
-        x: p.x,
-        y: p.y,
+        x: o.x,
+        y: o.y,
+        rotationDeg,
       };
       setAbilities(activeStageIndex, [...activeStage.abilities, next]);
+      setPlacementMode(null);
+      setAbilityDirPreview(null);
+      setSelectedId(null);
+      return;
     }
+
+    const next: StratPlacedAbility = {
+      id: newItemId(),
+      agentSlug: placementMode.slug,
+      slot: placementMode.slot,
+      x: p.x,
+      y: p.y,
+    };
+    setAbilities(activeStageIndex, [...activeStage.abilities, next]);
     setPlacementMode(null);
+    setAbilityDirPreview(null);
     setSelectedId(null);
   }
 
@@ -414,8 +468,49 @@ export function StratStageEditor({
           }
           setSelectedId(null);
         }}
-        style={{ cursor: placementMode ? "crosshair" : "default" }}
+        onPointerMove={(e) => {
+          if (
+            placementMode?.kind !== "ability" ||
+            !placementMode.pendingOriginAttack ||
+            !svgRef.current
+          ) {
+            setAbilityDirPreview(null);
+            return;
+          }
+          const r = svgPointerToLogical(svgRef.current, e.clientX, e.clientY);
+          setAbilityDirPreview(clampPointToViewBox(vb, r));
+        }}
+        onPointerLeave={() => setAbilityDirPreview(null)}
+        style={{
+          cursor:
+            placementMode?.kind === "ability" &&
+            placementMode.pendingOriginAttack
+              ? "crosshair"
+              : placementMode
+                ? "crosshair"
+                : "default",
+        }}
       />
+      {placementMode?.kind === "ability" &&
+      placementMode.pendingOriginAttack &&
+      abilityDirPreview ? (
+        <line
+          x1={
+            stratStagePinForDisplay(vb, side, placementMode.pendingOriginAttack)
+              .x
+          }
+          y1={
+            stratStagePinForDisplay(vb, side, placementMode.pendingOriginAttack)
+              .y
+          }
+          x2={abilityDirPreview.x}
+          y2={abilityDirPreview.y}
+          stroke="rgba(34,211,238,0.9)"
+          strokeWidth={Math.max(vbWidth * 0.0035, 1.5)}
+          strokeDasharray="12 10"
+          pointerEvents="none"
+        />
+      ) : null}
       {activeStage.agents.map((a) => {
         const meta = roster.find((r) => r.slug === a.agentSlug);
         const accent = meta
@@ -493,6 +588,7 @@ export function StratStageEditor({
                 mapX={pos.x}
                 mapY={pos.y}
                 vbWidth={vbWidth}
+                rotationDeg={ab.rotationDeg ?? 0}
                 selected={sel}
               />
             ) : (
@@ -720,17 +816,41 @@ export function StratStageEditor({
               <p className="text-xs text-violet-300/70">
                 {placementMode ? (
                   <>
-                    <span className="text-violet-200">Placement mode:</span> click
-                    the map to drop{" "}
+                    <span className="text-violet-200">Placement mode:</span>{" "}
                     {placementMode.kind === "agent" ? (
-                      <>an agent token ({placementMode.slug})</>
+                      <>click the map to drop an agent token ({placementMode.slug}).</>
+                    ) : placementMode.pendingOriginAttack ? (
+                      <>
+                        Second click: <strong className="text-cyan-200">face</strong>{" "}
+                        {placementMode.slot.toUpperCase()} for {placementMode.slug}{" "}
+                        (cyan preview line).
+                      </>
                     ) : (
                       <>
-                        {placementMode.slot.toUpperCase()} for{" "}
-                        {placementMode.slug}
+                        Click the map for{" "}
+                        {(() => {
+                          const b = agentBlueprintForSlot(
+                            agentsCatalog,
+                            placementMode.slug,
+                            placementMode.slot,
+                          );
+                          const m = b
+                            ? effectiveStratPlacementMode(b)
+                            : "center";
+                          return m === "origin_direction" ? (
+                            <>
+                              <strong className="text-cyan-200">origin</strong>, then
+                              again for direction
+                            </>
+                          ) : (
+                            <>
+                              {placementMode.slot.toUpperCase()} ({placementMode.slug})
+                            </>
+                          );
+                        })()}
+                        .
                       </>
-                    )}
-                    .{" "}
+                    )}{" "}
                     <button
                       type="button"
                       className="text-violet-300 underline"

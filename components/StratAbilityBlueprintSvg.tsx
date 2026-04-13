@@ -2,10 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import type { AgentAbilityBlueprint, AgentAbilityGeometry } from "@/types/agent-ability";
-import {
-  blueprintBoundsCenterAndSpan,
-  blueprintGeometryBounds,
-} from "@/lib/strat-ability-blueprint-bounds";
+import { blueprintStratAnchor } from "@/lib/strat-blueprint-anchor";
 import {
   BLUEPRINT_CANVAS_SIZE,
   stratBlueprintUnitsToMapScale,
@@ -36,6 +33,7 @@ export function StratAbilityBlueprintSvg({
   mapX,
   mapY,
   vbWidth,
+  rotationDeg = 0,
   selected,
   pointerEvents = "auto",
 }: {
@@ -43,18 +41,19 @@ export function StratAbilityBlueprintSvg({
   mapX: number;
   mapY: number;
   vbWidth: number;
+  /** Map heading: blueprint +X aligns with this angle (degrees). */
+  rotationDeg?: number;
   selected?: boolean;
   pointerEvents?: "none" | "auto";
 }) {
   const g = blueprint.geometry;
   const stroke = blueprint.color;
   const fill = `${blueprint.color}44`;
-  const bounds = blueprintGeometryBounds(g);
-  const { cx, cy } = blueprintBoundsCenterAndSpan(bounds);
+  const anchor = blueprintStratAnchor(blueprint);
   const scale = stratBlueprintUnitsToMapScale(vbWidth);
   const swMap = Math.max(vbWidth * 0.0016, 1.25) * (selected ? 1.35 : 1);
   const op = selected ? 1 : 0.92;
-  const transform = `translate(${mapX},${mapY}) scale(${scale}) translate(${-cx},${-cy})`;
+  const transform = `translate(${mapX},${mapY}) rotate(${rotationDeg}) scale(${scale}) translate(${-anchor.x},${-anchor.y})`;
 
   const commonStroke = {
     vectorEffect: "non-scaling-stroke" as const,
@@ -189,6 +188,42 @@ export function StratAbilityBlueprintSvg({
         </g>
       );
       break;
+    case "movement": {
+      const m = g;
+      inner = (
+        <g opacity={op} style={{ pointerEvents }}>
+          <line
+            x1={m.ax}
+            y1={m.ay}
+            x2={m.bx}
+            y2={m.by}
+            stroke={stroke}
+            strokeLinecap="round"
+            strokeDasharray={`${vbWidth * 0.014} ${vbWidth * 0.01}`}
+            {...commonStroke}
+            strokeWidth={swMap * 1.65}
+          />
+          <circle
+            cx={m.ax}
+            cy={m.ay}
+            r={BP * 0.012}
+            fill={stroke}
+            stroke="#fff"
+            {...commonStroke}
+            strokeWidth={swMap * 0.9}
+          />
+          <circle
+            cx={m.bx}
+            cy={m.by}
+            r={BP * 0.01}
+            fill={fill}
+            stroke={stroke}
+            {...commonStroke}
+          />
+        </g>
+      );
+      break;
+    }
     default:
       inner = null;
   }
