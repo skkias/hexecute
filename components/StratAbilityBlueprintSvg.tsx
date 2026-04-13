@@ -14,6 +14,7 @@ import {
   computeVisionConeLosPolygon,
   type VisionLosContext,
 } from "@/lib/vision-cone-los";
+import { computeRicochetPath } from "@/lib/ricochet-path";
 
 const BP = BLUEPRINT_CANVAS_SIZE;
 
@@ -394,6 +395,103 @@ export function StratAbilityBlueprintSvg({
           <circle
             cx={m.bx}
             cy={m.by}
+            r={BP * 0.01}
+            fill={textureFill}
+            stroke={stroke}
+            {...commonStroke}
+          />
+        </g>
+      );
+      break;
+    }
+    case "ricochet": {
+      const r = g;
+      if (visionLosContext) {
+        const from = blueprintPointToStratMapDisplay(
+          { x: r.ax, y: r.ay },
+          blueprint,
+          mapX,
+          mapY,
+          mappedVbWidth,
+          rotationDeg,
+          stratAnchorOverride,
+        );
+        const toward = blueprintPointToStratMapDisplay(
+          { x: r.bx, y: r.by },
+          blueprint,
+          mapX,
+          mapY,
+          mappedVbWidth,
+          rotationDeg,
+          stratAnchorOverride,
+        );
+        const pts = computeRicochetPath({
+          from,
+          toward,
+          context: visionLosContext,
+        });
+        const d = pts
+          .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+          .join(" ");
+        inner = (
+          <g opacity={op} style={{ pointerEvents }}>
+            <path
+              d={d}
+              fill="none"
+              stroke={stroke}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+              strokeWidth={swMap * 1.65}
+              strokeDasharray={`${vbWidth * 0.014 * MAP_BLUEPRINT_STROKE_SCALE} ${vbWidth * 0.01 * MAP_BLUEPRINT_STROKE_SCALE}`}
+            />
+            <circle
+              cx={from.x}
+              cy={from.y}
+              r={Math.max(vbWidth * 0.0045, 2.2)}
+              fill={stroke}
+              stroke="#fff"
+              vectorEffect="non-scaling-stroke"
+              strokeWidth={swMap * 0.9}
+            />
+            <circle
+              cx={pts[pts.length - 1]!.x}
+              cy={pts[pts.length - 1]!.y}
+              r={Math.max(vbWidth * 0.004, 2)}
+              fill={fill}
+              stroke={stroke}
+              vectorEffect="non-scaling-stroke"
+              strokeWidth={swMap * 0.85}
+            />
+          </g>
+        );
+        break;
+      }
+      inner = (
+        <g opacity={op} style={{ pointerEvents }}>
+          <line
+            x1={r.ax}
+            y1={r.ay}
+            x2={r.bx}
+            y2={r.by}
+            stroke={stroke}
+            strokeLinecap="round"
+            strokeDasharray={`${vbWidth * 0.014 * MAP_BLUEPRINT_STROKE_SCALE} ${vbWidth * 0.01 * MAP_BLUEPRINT_STROKE_SCALE}`}
+            {...commonStroke}
+            strokeWidth={swMap * 1.65}
+          />
+          <circle
+            cx={r.ax}
+            cy={r.ay}
+            r={BP * 0.012}
+            fill={stroke}
+            stroke="#fff"
+            {...commonStroke}
+            strokeWidth={swMap * 0.9}
+          />
+          <circle
+            cx={r.bx}
+            cy={r.by}
             r={BP * 0.01}
             fill={textureFill}
             stroke={stroke}

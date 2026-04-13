@@ -24,6 +24,7 @@ import {
   stratAbilityRotationHandleDistance,
   stratAbilityRotationHandleStored,
 } from "@/lib/strat-ability-rotation-handle";
+import { buildVisionLosContext } from "@/lib/vision-cone-los";
 
 function round4(n: number): string {
   const r = Math.round(n * 10000) / 10000;
@@ -58,6 +59,10 @@ export function AbilityBlueprintMapPreview({
 
   const { vb } = useMemo(
     () => stratMapDisplayData(gameMap, side),
+    [gameMap, side],
+  );
+  const visionLosContext = useMemo(
+    () => buildVisionLosContext(gameMap, side),
     [gameMap, side],
   );
 
@@ -296,6 +301,7 @@ export function AbilityBlueprintMapPreview({
               pointerEvents="auto"
               abilityDisplayIconUrl={abilityDisplayIconUrl ?? null}
               stratAnchorOverride={stratAnchorOverride}
+              visionLosContext={visionLosContext}
             />
             {useTwoHandles ? (
               <>

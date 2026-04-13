@@ -99,6 +99,11 @@ const SHAPE_OPTIONS: { value: AgentAbilityShapeKind; label: string; hint: string
       label: "Movement range",
       hint: "Teleport / dash max vector (A→B)",
     },
+    {
+      value: "ricochet",
+      label: "Ricochet mover",
+      hint: "Wingman / Roombot style wall bounces",
+    },
   ];
 
 function newId(): string {
@@ -138,6 +143,17 @@ function buildGeometry(
     const b = pts[1]!;
     return {
       kind: "movement",
+      ax: a.x,
+      ay: a.y,
+      bx: b.x,
+      by: b.y,
+    };
+  }
+  if (kind === "ricochet" && pts.length >= 2) {
+    const a = pts[0]!;
+    const b = pts[1]!;
+    return {
+      kind: "ricochet",
       ax: a.x,
       ay: a.y,
       bx: b.x,
@@ -507,6 +523,40 @@ function AbilityShapePreview({
         </g>
       );
     }
+    case "ricochet": {
+      const m = g;
+      return (
+        <g opacity={op}>
+          <AbilityTextureDefs
+            patternId={texturePatternId}
+            textureId={b.textureId}
+            color={b.color}
+            originX={textureAnchor.x}
+            originY={textureAnchor.y}
+            radialFromOrigin={b.textureRadialFromOrigin === true}
+          />
+          <line
+            x1={m.ax}
+            y1={m.ay}
+            x2={m.bx}
+            y2={m.by}
+            stroke={stroke}
+            strokeWidth={sw * 2}
+            strokeLinecap="round"
+            strokeDasharray={`${VB * 0.02} ${VB * 0.014}`}
+          />
+          <circle cx={m.ax} cy={m.ay} r={VB * 0.014} fill={stroke} stroke="#fff" strokeWidth={sw} />
+          <circle
+            cx={m.bx}
+            cy={m.by}
+            r={VB * 0.011}
+            fill={textureFill}
+            stroke={stroke}
+            strokeWidth={sw * 0.85}
+          />
+        </g>
+      );
+    }
     default:
       return null;
   }
@@ -548,6 +598,8 @@ function placementHint(kind: AgentAbilityShapeKind): string {
       return "Click center, a point on the arc (radius), then end direction.";
     case "movement":
       return "Click start (from), then end (max range).";
+    case "ricochet":
+      return "Click start (from), then heading + max travel distance (wall-bounce path).";
     default:
       return "";
   }
@@ -561,6 +613,7 @@ function pointsDoneCount(kind: AgentAbilityShapeKind): number {
     case "ray":
     case "rectangle":
     case "movement":
+    case "ricochet":
       return 2;
     case "cone":
     case "arc":
@@ -599,6 +652,7 @@ function placementProgressLine(
     rectangle: ["1/2 — one corner", "2/2 — opposite corner", ""],
     arc: ["1/3 — arc center", "2/3 — radius & start", "3/3 — arc direction"],
     movement: ["1/2 — range from", "2/2 — range to", ""],
+    ricochet: ["1/2 — launch from", "2/2 — heading + distance", ""],
   };
   const row = labels[kind];
   const line =
@@ -816,6 +870,10 @@ export function AgentAbilityEditor({
       }
       if (geo.kind === "cone") {
         next.origin = { x: geo.ox, y: geo.oy };
+      }
+      if (placement.shapeKind === "ricochet") {
+        next.stratAttachToAgent = true;
+        next.stratPlacementMode = "origin_direction";
       }
       setAbilities((a) => [...a, next]);
       setSelectedId(next.id);

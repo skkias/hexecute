@@ -234,6 +234,7 @@ export function BlueprintGeometryFields({
         </>
       );
     case "movement":
+    case "ricochet":
       return (
         <>
           <p className="mb-1 text-[10px] uppercase tracking-wide text-violet-500/80">
@@ -248,7 +249,7 @@ export function BlueprintGeometryFields({
                 value={g.ax}
                 onChange={(e) =>
                   onChange({
-                    kind: "movement",
+                    kind: g.kind,
                     ax: clampCoord(Number.parseFloat(e.target.value)),
                     ay: g.ay,
                     bx: g.bx,
@@ -266,7 +267,7 @@ export function BlueprintGeometryFields({
                 value={g.ay}
                 onChange={(e) =>
                   onChange({
-                    kind: "movement",
+                    kind: g.kind,
                     ax: g.ax,
                     ay: clampCoord(Number.parseFloat(e.target.value)),
                     bx: g.bx,
@@ -289,7 +290,7 @@ export function BlueprintGeometryFields({
                 value={g.bx}
                 onChange={(e) =>
                   onChange({
-                    kind: "movement",
+                    kind: g.kind,
                     ax: g.ax,
                     ay: g.ay,
                     bx: clampCoord(Number.parseFloat(e.target.value)),
@@ -307,7 +308,7 @@ export function BlueprintGeometryFields({
                 value={g.by}
                 onChange={(e) =>
                   onChange({
-                    kind: "movement",
+                    kind: g.kind,
                     ax: g.ax,
                     ay: g.ay,
                     bx: g.bx,

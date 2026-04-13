@@ -145,7 +145,7 @@ export function BlueprintPlacementPreview({
     );
   }
 
-  if (kind === "movement" && pts.length === 1) {
+  if ((kind === "movement" || kind === "ricochet") && pts.length === 1) {
     const p0 = pts[0]!;
     return (
       <g pointerEvents="none" opacity={0.8}>

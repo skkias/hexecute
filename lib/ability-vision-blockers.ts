@@ -205,6 +205,12 @@ export function abilityVisionBlockersOnMap(
         b: mapPt({ x: g.bx, y: g.by }, blueprint, mapX, mapY, effectiveVbWidth, rotationDeg),
       });
       break;
+    case "ricochet":
+      openSegments.push({
+        a: mapPt({ x: g.ax, y: g.ay }, blueprint, mapX, mapY, effectiveVbWidth, rotationDeg),
+        b: mapPt({ x: g.bx, y: g.by }, blueprint, mapX, mapY, effectiveVbWidth, rotationDeg),
+      });
+      break;
     default:
       break;
   }

@@ -42,8 +42,10 @@ export function stratMapDisplayData(
   const vb = viewBoxRectFromMap(map);
   const rect = vb;
   const extra = map.extra_paths ?? [];
+  const meaningInverted = em.side_meaning_inverted === true;
+  const shouldFlipForSide = meaningInverted ? side === "atk" : side === "def";
 
-  if (side === "atk") {
+  if (!shouldFlipForSide) {
     return {
       vb,
       overlays: extra,

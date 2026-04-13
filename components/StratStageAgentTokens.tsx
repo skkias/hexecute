@@ -63,6 +63,13 @@ export function StratStageAgentTokens({
   pinScale?: number;
 }) {
   const { tokenR, fontAgent } = stratAgentTokenDimensions(vbWidth, pinScale);
+  const orderedAgents = interactive?.selectedId
+    ? [...agents].sort((a, b) => {
+        const aSel = interactive.selectedId === a.id ? 1 : 0;
+        const bSel = interactive.selectedId === b.id ? 1 : 0;
+        return aSel - bSel;
+      })
+    : agents;
 
   const [animArmed, setAnimArmed] = useState(false);
   const [exitingAgents, setExitingAgents] = useState<StratPlacedAgent[]>([]);
@@ -123,7 +130,7 @@ export function StratStageAgentTokens({
 
   return (
     <>
-      {agents.map((a) => {
+      {orderedAgents.map((a) => {
         const meta = roster.find((r) => r.slug === a.agentSlug);
         const accent = meta
           ? roleAccent(meta.role, meta.themeColor)

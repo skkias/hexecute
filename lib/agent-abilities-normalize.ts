@@ -24,6 +24,7 @@ const SHAPE_KINDS: AgentAbilityShapeKind[] = [
   "rectangle",
   "arc",
   "movement",
+  "ricochet",
 ];
 
 const STRAT_PLACEMENT: ("center" | "origin_direction")[] = [
@@ -167,6 +168,15 @@ function normalizeGeometry(
       by: clamp(Number(o.by)),
     };
   }
+  if (k === "ricochet" && shapeKind === "ricochet") {
+    return {
+      kind: "ricochet",
+      ax: clamp(Number(o.ax)),
+      ay: clamp(Number(o.ay)),
+      bx: clamp(Number(o.bx)),
+      by: clamp(Number(o.by)),
+    };
+  }
   return null;
 }
 
@@ -215,6 +225,14 @@ function defaultGeometry(kind: AgentAbilityShapeKind): AgentAbilityGeometry {
     case "movement":
       return {
         kind: "movement",
+        ax: 420,
+        ay: 500,
+        bx: 580,
+        by: 500,
+      };
+    case "ricochet":
+      return {
+        kind: "ricochet",
         ax: 420,
         ay: 500,
         bx: 580,

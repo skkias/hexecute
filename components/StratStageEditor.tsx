@@ -841,6 +841,30 @@ export function StratStageEditor({
     return false;
   }, [activeStage, placementMode, agentsCatalog, selectedId]);
 
+  const selectedAgentId =
+    activeStage?.agents.some((a) => a.id === selectedId) ? selectedId : null;
+  const orderedVisionConeAgents = useMemo(() => {
+    if (!activeStage) return [];
+    const withCones = activeStage.agents.filter((a) => a.visionConeWidth);
+    return [...withCones].sort((a, b) => {
+      const aSel = selectedAgentId === a.id ? 1 : 0;
+      const bSel = selectedAgentId === b.id ? 1 : 0;
+      return aSel - bSel;
+    });
+  }, [activeStage, selectedAgentId]);
+  const orderedAbilities = useMemo(() => {
+    if (!activeStage) return [];
+    return [...activeStage.abilities].sort((a, b) => {
+      const aPri =
+        (selectedId === a.id ? 2 : 0) +
+        (selectedAgentId && a.attachedToAgentId === selectedAgentId ? 1 : 0);
+      const bPri =
+        (selectedId === b.id ? 2 : 0) +
+        (selectedAgentId && b.attachedToAgentId === selectedAgentId ? 1 : 0);
+      return aPri - bPri;
+    });
+  }, [activeStage, selectedId, selectedAgentId]);
+
   const overlay = activeStage ? (
     <g style={{ pointerEvents: "auto" }}>
       <rect
@@ -946,9 +970,7 @@ export function StratStageEditor({
           pointerEvents="none"
         />
       ) : null}
-      {activeStage.agents
-        .filter((a) => a.visionConeWidth)
-        .map((agent) => {
+      {orderedVisionConeAgents.map((agent) => {
           const w = agent.visionConeWidth!;
           const rot = agent.visionConeRotationDeg ?? 0;
           const sel = selectedId === agent.id;
@@ -1088,7 +1110,7 @@ export function StratStageEditor({
             </g>
           );
         })}
-      {activeStage.abilities.map((ab) => {
+      {orderedAbilities.map((ab) => {
         const agentTheme =
           agentsCatalog.find((a) => a.slug === ab.agentSlug)?.theme_color ??
           "rgb(34,211,238)";
@@ -1102,6 +1124,7 @@ export function StratStageEditor({
         const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
         const useTwoHandles =
           bp != null && effectiveStratPlacementMode(bp) === "origin_direction";
+        const showRotationHandle = useTwoHandles && bp?.shapeKind !== "circle";
         const stratOv = bp ? stratAnchorOverrideForBlueprint(bp) : undefined;
         const isRectOD =
           useTwoHandles &&
@@ -1198,17 +1221,19 @@ export function StratStageEditor({
               </g>
               {sel ? (
                 <>
-                  <line
-                    x1={pos.x}
-                    y1={pos.y}
-                    x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
-                    y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
-                    stroke={accentColor}
-                    opacity={0.75}
-                    strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
-                    strokeDasharray="6 5"
-                    pointerEvents="none"
-                  />
+                  {showRotationHandle ? (
+                    <line
+                      x1={pos.x}
+                      y1={pos.y}
+                      x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
+                      y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
+                      stroke={accentColor}
+                      opacity={0.75}
+                      strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
+                      strokeDasharray="6 5"
+                      pointerEvents="none"
+                    />
+                  ) : null}
                   {!isAttached ? (
                     <circle
                       cx={pos.x}
@@ -1241,31 +1266,33 @@ export function StratStageEditor({
                       }}
                     />
                   ) : null}
-                  <circle
-                    cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
-                    cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
-                    r={Math.max(vbWidth * 0.009, 4.5) * pinS}
-                    fill={accentColor}
-                    stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
-                    strokeWidth={
-                      Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1) * pinS
-                    }
-                    style={{
-                      cursor: placementMode ? "default" : "grab",
-                      touchAction: "none",
-                    }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      if (placementMode) return;
-                      setSelectedId(ab.id);
-                      focusMapSvg();
-                      setDrag({
-                        kind: "abilityRotate",
-                        id: ab.id,
-                        pointerId: e.pointerId,
-                      });
-                    }}
-                  />
+                  {showRotationHandle ? (
+                    <circle
+                      cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
+                      cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
+                      r={Math.max(vbWidth * 0.009, 4.5) * pinS}
+                      fill={accentColor}
+                      stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                      strokeWidth={
+                        Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1) * pinS
+                      }
+                      style={{
+                        cursor: placementMode ? "default" : "grab",
+                        touchAction: "none",
+                      }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (placementMode) return;
+                        setSelectedId(ab.id);
+                        focusMapSvg();
+                        setDrag({
+                          kind: "abilityRotate",
+                          id: ab.id,
+                          pointerId: e.pointerId,
+                        });
+                      }}
+                    />
+                  ) : null}
                 </>
               ) : null}
             </g>

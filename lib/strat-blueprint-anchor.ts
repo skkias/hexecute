@@ -36,6 +36,7 @@ export function defaultStratPlacementForShape(
     case "polyline":
     case "polygon":
     case "movement":
+    case "ricochet":
     case "cone":
     case "vision_cone_narrow":
     case "vision_cone_wide":
@@ -70,6 +71,7 @@ export function blueprintSupportsStratAttachToAgent(
     case "vision_cone_narrow":
     case "vision_cone_wide":
     case "point":
+    case "ricochet":
       return true;
     default:
       return false;

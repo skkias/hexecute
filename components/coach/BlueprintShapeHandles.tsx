@@ -224,6 +224,7 @@ export function BlueprintShapeHandles({
         </g>
       );
     case "movement":
+    case "ricochet":
       return (
         <g style={{ pointerEvents: "auto" }} data-blueprint-handles>
           {handleEl(geom.ax, geom.ay, "mov-a", geom)}
@@ -316,10 +317,13 @@ function computeDraggedGeometry(
       return null;
     }
     case "movement": {
-      const src = liveGeom.kind === "movement" ? liveGeom : g;
+      const src =
+        liveGeom.kind === "movement" || liveGeom.kind === "ricochet"
+          ? liveGeom
+          : g;
       if (handleId === "mov-a")
         return {
-          kind: "movement",
+          kind: g.kind,
           ax: p.x,
           ay: p.y,
           bx: src.bx,
@@ -327,7 +331,30 @@ function computeDraggedGeometry(
         };
       if (handleId === "mov-b")
         return {
-          kind: "movement",
+          kind: g.kind,
+          ax: src.ax,
+          ay: src.ay,
+          bx: p.x,
+          by: p.y,
+        };
+      return null;
+    }
+    case "ricochet": {
+      const src =
+        liveGeom.kind === "movement" || liveGeom.kind === "ricochet"
+          ? liveGeom
+          : g;
+      if (handleId === "mov-a")
+        return {
+          kind: g.kind,
+          ax: p.x,
+          ay: p.y,
+          bx: src.bx,
+          by: src.by,
+        };
+      if (handleId === "mov-b")
+        return {
+          kind: g.kind,
           ax: src.ax,
           ay: src.ay,
           bx: p.x,

@@ -36,6 +36,8 @@ export function blueprintGeometryBounds(g: AgentAbilityGeometry): BBox {
       return addPoint(addPoint(empty(), g.x1, g.y1), g.x2, g.y2);
     case "movement":
       return addPoint(addPoint(empty(), g.ax, g.ay), g.bx, g.by);
+    case "ricochet":
+      return addPoint(addPoint(empty(), g.ax, g.ay), g.bx, g.by);
     case "cone": {
       let b = empty();
       b = addPoint(b, g.ox, g.oy);

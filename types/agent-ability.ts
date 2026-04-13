@@ -14,6 +14,7 @@ export type AgentAbilitySlot = "q" | "e" | "c" | "x";
  * - rectangle: aligned box (resizable)
  * - arc: curved utility arc (Sova shock style)
  * - movement: teleport / dash max range (segment A→B in blueprint space)
+ * - ricochet: straight-line mover that bounces off map walls (Wingman / Roombot style)
  */
 export type AgentAbilityShapeKind =
   | "point"
@@ -26,7 +27,8 @@ export type AgentAbilityShapeKind =
   | "polygon"
   | "rectangle"
   | "arc"
-  | "movement";
+  | "movement"
+  | "ricochet";
 
 export type AbilityTextureId =
   | "solid"
@@ -96,7 +98,12 @@ export type AgentAbilityGeometry =
   /**
    * Movement / teleport range: segment from A to B (max displacement vector in blueprint space).
    */
-  | { kind: "movement"; ax: number; ay: number; bx: number; by: number };
+  | { kind: "movement"; ax: number; ay: number; bx: number; by: number }
+  /**
+   * Ricochet utility path: launch vector A→B defines heading + max travel distance.
+   * On the strat map, this reflects off geometry boundaries until distance is spent.
+   */
+  | { kind: "ricochet"; ax: number; ay: number; bx: number; by: number };
 
 export interface AgentAbilityBlueprint {
   id: string;
