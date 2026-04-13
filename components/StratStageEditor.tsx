@@ -52,6 +52,7 @@ import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
 import { StratAbilityBlueprintSvg } from "@/components/StratAbilityBlueprintSvg";
 import {
   clampPointToViewBox,
+  flipPointsThroughViewBoxCenter,
   type MapPoint,
   type ViewBoxRect,
 } from "@/lib/map-path";
@@ -211,6 +212,7 @@ export function StratStageEditor({
     () => (stratUsesAttackEditorFrame(gameMap, "atk") ? "atk" : "def"),
     [gameMap, side],
   );
+  const rotateView180 = side !== editorFrameSide;
 
   useEffect(() => {
     setPlacementMode(null);
@@ -250,13 +252,16 @@ export function StratStageEditor({
   );
 
   const svgPointerToLogical = useCallback(
-    (svg: SVGSVGElement, clientX: number, clientY: number) =>
-      rootPointToLogicalGeometry(
+    (svg: SVGSVGElement, clientX: number, clientY: number) => {
+      const p = rootPointToLogicalGeometry(
         clientToSvgPoint(svg, clientX, clientY),
         vb,
         mapGeoScale,
-      ),
-    [vb, mapGeoScale],
+      );
+      if (!rotateView180) return p;
+      return flipPointsThroughViewBoxCenter(vb, [p])[0] ?? p;
+    },
+    [vb, mapGeoScale, rotateView180],
   );
 
   const roster = useMemo(() => {
@@ -2002,6 +2007,7 @@ export function StratStageEditor({
           ref={svgRef}
           gameMap={gameMap}
           side={editorFrameSide}
+          rotateView180={rotateView180}
           showLayerToggles
           showFooter={false}
           embed

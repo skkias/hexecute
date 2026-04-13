@@ -354,6 +354,8 @@ function overlayVisible(
 export type StratMapViewerProps = {
   gameMap: GameMap;
   side: StratSide;
+  /** Rotate the rendered map scene 180° around viewBox center. */
+  rotateView180?: boolean;
   /** Extra SVG nodes drawn above map layers (e.g. strat stage pins). */
   children?: ReactNode;
   /** When false, the checkbox strip is hidden. */
@@ -380,6 +382,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
     {
       gameMap,
       side,
+      rotateView180 = false,
       children,
       showLayerToggles = true,
       showFooter = true,
@@ -433,6 +436,12 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
   const mapGeoScale = mapGeometryScaleFromEditorMeta(
     normalizeEditorMeta(gameMap.editor_meta),
   );
+  const viewRotationTransform = useMemo(() => {
+    if (!rotateView180) return undefined;
+    const cx = vb.minX + vb.width / 2;
+    const cy = vb.minY + vb.height / 2;
+    return `rotate(180 ${cx} ${cy})`;
+  }, [rotateView180, vb]);
   const geometryGroupTransform = useMemo(
     () => mapGeometryGroupTransform(vb, mapGeoScale),
     [vb, mapGeoScale],
@@ -740,229 +749,231 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
             fill="rgb(15,23,42)"
           />
 
-          <g transform={geometryGroupTransform}>
-          {effectiveVis.territoryOutline &&
-            territoryPathD &&
-            territoryPathD.trim().length > 0 && (
-              <path
-                d={territoryPathD}
-                fill={TERRITORY_OUTLINE_FILL}
-                fillRule="evenodd"
-                stroke={TERRITORY_OUTLINE_STROKE}
-                strokeWidth={vb.width * 0.004 * MAP_VIEW_VECTOR_STROKE_SCALE}
-                strokeLinejoin="round"
-                pointerEvents="none"
-              />
-            )}
+          <g transform={viewRotationTransform}>
+            <g transform={geometryGroupTransform}>
+            {effectiveVis.territoryOutline &&
+              territoryPathD &&
+              territoryPathD.trim().length > 0 && (
+                <path
+                  d={territoryPathD}
+                  fill={TERRITORY_OUTLINE_FILL}
+                  fillRule="evenodd"
+                  stroke={TERRITORY_OUTLINE_STROKE}
+                  strokeWidth={vb.width * 0.004 * MAP_VIEW_VECTOR_STROKE_SCALE}
+                  strokeLinejoin="round"
+                  pointerEvents="none"
+                />
+              )}
 
-          <g style={{ pointerEvents: "none" }}>
-            {overlaysSorted.map((sh) => {
-              if (!overlayVisible(sh, effectiveVis)) return null;
-              const vbW = vb.width;
-              if (
-                sh.kind === "breakable_doorway" ||
-                sh.kind === "toggle_door"
-              ) {
-                return (
-                  <g key={sh.id}>
-                    <DoorwayOverlaySvg sh={sh} vbWidth={vbW} />
-                  </g>
-                );
-              }
-              if (sh.kind === "rope") {
-                return (
-                  <g key={sh.id}>
-                    <RopeOverlaySvg sh={sh} vbWidth={vbW} />
-                  </g>
-                );
-              }
-              if (sh.kind === "spawn_barrier") {
-                const pts = sh.points;
-                if (pts.length === 0) return null;
-                if (pts.length === 1) {
-                  const p = pts[0]!;
+            <g style={{ pointerEvents: "none" }}>
+              {overlaysSorted.map((sh) => {
+                if (!overlayVisible(sh, effectiveVis)) return null;
+                const vbW = vb.width;
+                if (
+                  sh.kind === "breakable_doorway" ||
+                  sh.kind === "toggle_door"
+                ) {
                   return (
-                    <circle
+                    <g key={sh.id}>
+                      <DoorwayOverlaySvg sh={sh} vbWidth={vbW} />
+                    </g>
+                  );
+                }
+                if (sh.kind === "rope") {
+                  return (
+                    <g key={sh.id}>
+                      <RopeOverlaySvg sh={sh} vbWidth={vbW} />
+                    </g>
+                  );
+                }
+                if (sh.kind === "spawn_barrier") {
+                  const pts = sh.points;
+                  if (pts.length === 0) return null;
+                  if (pts.length === 1) {
+                    const p = pts[0]!;
+                    return (
+                      <circle
+                        key={sh.id}
+                        cx={p.x}
+                        cy={p.y}
+                        r={vbW * 0.006}
+                        fill={SPAWN_BARRIER_STROKE}
+                      />
+                    );
+                  }
+                  const d = pts
+                    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
+                    .join(" ");
+                  return (
+                    <path
                       key={sh.id}
-                      cx={p.x}
-                      cy={p.y}
-                      r={vbW * 0.006}
-                      fill={SPAWN_BARRIER_STROKE}
+                      d={d}
+                      fill="none"
+                      stroke={SPAWN_BARRIER_STROKE}
+                      strokeWidth={vbW * 0.0042 * MAP_VIEW_VECTOR_STROKE_SCALE}
+                      strokeDasharray="12 8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      opacity={0.9}
                     />
                   );
                 }
-                const d = pts
-                  .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
-                  .join(" ");
-                return (
-                  <path
-                    key={sh.id}
-                    d={d}
-                    fill="none"
-                    stroke={SPAWN_BARRIER_STROKE}
-                    strokeWidth={vbW * 0.0042 * MAP_VIEW_VECTOR_STROKE_SCALE}
-                    strokeDasharray="12 8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity={0.9}
-                  />
+                if (sh.kind === "grade") {
+                  return (
+                    <g key={sh.id}>
+                      <GradeOverlaySvg sh={sh} vbWidth={vbW} />
+                    </g>
+                  );
+                }
+                if (isCircleOverlay(sh) && sh.circle) {
+                  const poly = overlayPolygonStyle(sh.kind, overlayFloor(sh));
+                  if (!poly) return null;
+                  const c = sh.circle;
+                  return (
+                    <g key={sh.id}>
+                      <circle
+                        cx={c.cx}
+                        cy={c.cy}
+                        r={c.r}
+                        fill={poly.fill}
+                        stroke={poly.stroke}
+                        strokeWidth={vbW * 0.003 * MAP_VIEW_VECTOR_STROKE_SCALE}
+                        strokeLinejoin="round"
+                      />
+                    </g>
+                  );
+                }
+                const d = previewOverlayStrokePath(sh.kind, sh.points);
+                if (!d) return null;
+                const poly = overlayPolygonStyle(
+                  sh.kind,
+                  overlayFloor(sh),
+                  sh.kind === "obstacle" && !effectiveVis.obstacle,
                 );
-              }
-              if (sh.kind === "grade") {
-                return (
-                  <g key={sh.id}>
-                    <GradeOverlaySvg sh={sh} vbWidth={vbW} />
-                  </g>
-                );
-              }
-              if (isCircleOverlay(sh) && sh.circle) {
-                const poly = overlayPolygonStyle(sh.kind, overlayFloor(sh));
                 if (!poly) return null;
-                const c = sh.circle;
                 return (
                   <g key={sh.id}>
-                    <circle
-                      cx={c.cx}
-                      cy={c.cy}
-                      r={c.r}
+                    <path
+                      d={d}
                       fill={poly.fill}
                       stroke={poly.stroke}
                       strokeWidth={vbW * 0.003 * MAP_VIEW_VECTOR_STROKE_SCALE}
                       strokeLinejoin="round"
+                      strokeDasharray={
+                        sh.kind === "plant_site" ? "9 6" : undefined
+                      }
                     />
-                  </g>
-                );
-              }
-              const d = previewOverlayStrokePath(sh.kind, sh.points);
-              if (!d) return null;
-              const poly = overlayPolygonStyle(
-                sh.kind,
-                overlayFloor(sh),
-                sh.kind === "obstacle" && !effectiveVis.obstacle,
-              );
-              if (!poly) return null;
-              return (
-                <g key={sh.id}>
-                  <path
-                    d={d}
-                    fill={poly.fill}
-                    stroke={poly.stroke}
-                    strokeWidth={vbW * 0.003 * MAP_VIEW_VECTOR_STROKE_SCALE}
-                    strokeLinejoin="round"
-                    strokeDasharray={
-                      sh.kind === "plant_site" ? "9 6" : undefined
-                    }
-                  />
-                </g>
-              );
-            })}
-          </g>
-
-          <g style={{ pointerEvents: "none" }}>
-            {spawn_markers.map((s) => {
-              if (s.side === "atk" && !effectiveVis.spawnAtk) return null;
-              if (s.side === "def" && !effectiveVis.spawnDef) return null;
-              const atk = s.side === "atk";
-              const fill = atk ? SPAWN_ATK_FILL : SPAWN_DEF_FILL;
-              const stroke = atk ? SPAWN_ATK_STROKE : SPAWN_DEF_STROKE;
-              return (
-                <circle
-                  key={`spawn-${s.id}`}
-                  cx={s.x}
-                  cy={s.y}
-                  r={annMarkerR}
-                  fill={fill}
-                  fillOpacity={0.95}
-                  stroke={stroke}
-                  strokeWidth={strokeOutBase * 0.85}
-                />
-              );
-            })}
-          </g>
-
-          {effectiveVis.labels ? (
-            <g style={{ pointerEvents: "none" }}>
-              {location_labels.map((l) => {
-                const fs = labelFontSize * l.size;
-                const pinR = annMarkerR * l.size * 0.55;
-                const strokeOut = fs * 0.08 * MAP_VIEW_VECTOR_STROKE_SCALE;
-                const fill = l.color;
-                const textOnlyGap = Math.max(
-                  fs * 0.35,
-                  annMarkerR * l.size * 0.45,
-                );
-                const tp = mapLabelTextSvgProps(l.text_anchor, {
-                  px: l.x,
-                  py: l.y,
-                  pinR,
-                  fs,
-                  isPin: l.style === "pin",
-                  textOnlyGap,
-                });
-                const rot = l.text_rotation_deg ?? 0;
-                const textRotate =
-                  rot !== 0 && Number.isFinite(rot)
-                    ? `translate(${tp.x},${tp.y}) rotate(${rot}) translate(${-tp.x},${-tp.y})`
-                    : undefined;
-                if (l.style === "text") {
-                  return (
-                    <text
-                      key={`label-${l.id}`}
-                      transform={textRotate}
-                      x={tp.x}
-                      y={tp.y}
-                      textAnchor={tp.textAnchor}
-                      dominantBaseline={tp.dominantBaseline}
-                      fill={fill}
-                      stroke="rgba(12,12,18,0.88)"
-                      strokeWidth={strokeOut}
-                      paintOrder="stroke fill"
-                      style={{
-                        fontSize: fs,
-                        fontFamily: "system-ui, sans-serif",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {l.text}
-                    </text>
-                  );
-                }
-                return (
-                  <g key={`label-${l.id}`}>
-                    <circle
-                      cx={l.x}
-                      cy={l.y}
-                      r={pinR}
-                      fill={fill}
-                      fillOpacity={0.95}
-                      stroke="rgba(255,255,255,0.92)"
-                      strokeWidth={strokeOutBase * 0.75 * l.size}
-                    />
-                    <text
-                      transform={textRotate}
-                      x={tp.x}
-                      y={tp.y}
-                      textAnchor={tp.textAnchor}
-                      dominantBaseline={tp.dominantBaseline}
-                      fill={fill}
-                      stroke="rgba(12,12,18,0.88)"
-                      strokeWidth={strokeOut}
-                      paintOrder="stroke fill"
-                      style={{
-                        fontSize: fs,
-                        fontFamily: "system-ui, sans-serif",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {l.text}
-                    </text>
                   </g>
                 );
               })}
             </g>
-          ) : null}
 
-          {children}
+            <g style={{ pointerEvents: "none" }}>
+              {spawn_markers.map((s) => {
+                if (s.side === "atk" && !effectiveVis.spawnAtk) return null;
+                if (s.side === "def" && !effectiveVis.spawnDef) return null;
+                const atk = s.side === "atk";
+                const fill = atk ? SPAWN_ATK_FILL : SPAWN_DEF_FILL;
+                const stroke = atk ? SPAWN_ATK_STROKE : SPAWN_DEF_STROKE;
+                return (
+                  <circle
+                    key={`spawn-${s.id}`}
+                    cx={s.x}
+                    cy={s.y}
+                    r={annMarkerR}
+                    fill={fill}
+                    fillOpacity={0.95}
+                    stroke={stroke}
+                    strokeWidth={strokeOutBase * 0.85}
+                  />
+                );
+              })}
+            </g>
+
+            {effectiveVis.labels ? (
+              <g style={{ pointerEvents: "none" }}>
+                {location_labels.map((l) => {
+                  const fs = labelFontSize * l.size;
+                  const pinR = annMarkerR * l.size * 0.55;
+                  const strokeOut = fs * 0.08 * MAP_VIEW_VECTOR_STROKE_SCALE;
+                  const fill = l.color;
+                  const textOnlyGap = Math.max(
+                    fs * 0.35,
+                    annMarkerR * l.size * 0.45,
+                  );
+                  const tp = mapLabelTextSvgProps(l.text_anchor, {
+                    px: l.x,
+                    py: l.y,
+                    pinR,
+                    fs,
+                    isPin: l.style === "pin",
+                    textOnlyGap,
+                  });
+                  const rot = l.text_rotation_deg ?? 0;
+                  const textRotate =
+                    rot !== 0 && Number.isFinite(rot)
+                      ? `translate(${tp.x},${tp.y}) rotate(${rot}) translate(${-tp.x},${-tp.y})`
+                      : undefined;
+                  if (l.style === "text") {
+                    return (
+                      <text
+                        key={`label-${l.id}`}
+                        transform={textRotate}
+                        x={tp.x}
+                        y={tp.y}
+                        textAnchor={tp.textAnchor}
+                        dominantBaseline={tp.dominantBaseline}
+                        fill={fill}
+                        stroke="rgba(12,12,18,0.88)"
+                        strokeWidth={strokeOut}
+                        paintOrder="stroke fill"
+                        style={{
+                          fontSize: fs,
+                          fontFamily: "system-ui, sans-serif",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {l.text}
+                      </text>
+                    );
+                  }
+                  return (
+                    <g key={`label-${l.id}`}>
+                      <circle
+                        cx={l.x}
+                        cy={l.y}
+                        r={pinR}
+                        fill={fill}
+                        fillOpacity={0.95}
+                        stroke="rgba(255,255,255,0.92)"
+                        strokeWidth={strokeOutBase * 0.75 * l.size}
+                      />
+                      <text
+                        transform={textRotate}
+                        x={tp.x}
+                        y={tp.y}
+                        textAnchor={tp.textAnchor}
+                        dominantBaseline={tp.dominantBaseline}
+                        fill={fill}
+                        stroke="rgba(12,12,18,0.88)"
+                        strokeWidth={strokeOut}
+                        paintOrder="stroke fill"
+                        style={{
+                          fontSize: fs,
+                          fontFamily: "system-ui, sans-serif",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {l.text}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            ) : null}
+
+            {children}
+            </g>
           </g>
         </svg>
       </div>
