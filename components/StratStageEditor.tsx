@@ -38,6 +38,14 @@ import {
   type StratAgentTokenTransition,
 } from "@/components/StratStageAgentTokens";
 import {
+  COACH_MAP_PIN_SCALE_MAX,
+  COACH_MAP_PIN_SCALE_MIN,
+  clampCoachMapPinScale,
+  readCoachMapPinScale,
+  stratAbilityPinDimensions,
+  writeCoachMapPinScale,
+} from "@/lib/strat-map-pin-scale";
+import {
   abilitySlotLabel,
   abilitySlotStyle,
 } from "@/lib/strat-stage-pin-styles";
@@ -156,6 +164,8 @@ export function StratStageEditor({
   const [valorantAbilityUi, setValorantAbilityUi] = useState<
     Record<string, ValorantAbilityUiMeta[]>
   >({});
+  /** Coach: scales agent + ability pins on the map (persisted locally). */
+  const [mapPinScale, setMapPinScale] = useState(1);
   const [valorantUiError, setValorantUiError] = useState<string | null>(null);
 
   const didMountRef = useRef(false);
@@ -217,6 +227,10 @@ export function StratStageEditor({
         } => x != null,
       );
   }, [compSlugs, agentsCatalog]);
+
+  useEffect(() => {
+    setMapPinScale(readCoachMapPinScale());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -504,8 +518,11 @@ export function StratStageEditor({
     setSelectedId(null);
   }
 
-  const abilityR = vbWidth * 0.012;
-  const fontAbility = Math.max(9, vbWidth * 0.013);
+  const pinS = clampCoachMapPinScale(mapPinScale);
+  const { abilityR, fontAbility } = stratAbilityPinDimensions(
+    vbWidth,
+    mapPinScale,
+  );
 
   const overlay = activeStage ? (
     <g style={{ pointerEvents: "auto" }}>
@@ -561,7 +578,7 @@ export function StratStageEditor({
           x2={abilityDirPreview.x}
           y2={abilityDirPreview.y}
           stroke="rgba(34,211,238,0.9)"
-          strokeWidth={Math.max(vbWidth * 0.0035, 1.5)}
+          strokeWidth={Math.max(vbWidth * 0.0035, 1.5) * pinS}
           strokeDasharray="12 10"
           pointerEvents="none"
         />
@@ -579,7 +596,7 @@ export function StratStageEditor({
           bp != null &&
           bp.shapeKind === "rectangle" &&
           bp.geometry.kind === "rectangle";
-        const rotDist = stratAbilityRotationHandleDistance(vbWidth);
+        const rotDist = stratAbilityRotationHandleDistance(vbWidth) * pinS;
         const rotStored = stratAbilityRotationHandleStored(
           { x: ab.x, y: ab.y },
           ab.rotationDeg ?? 0,
@@ -609,6 +626,7 @@ export function StratStageEditor({
             rotationDeg={ab.rotationDeg ?? 0}
             selected={sel}
             stratAnchorOverride={stratOv}
+            mapPinScale={mapPinScale}
             abilityDisplayIconUrl={
               bp.shapeKind === "point"
                 ? abilityMetaForSlot(
@@ -626,7 +644,9 @@ export function StratStageEditor({
               r={abilityR}
               fill={st.fill}
               stroke={sel ? "#fae8ff" : st.stroke}
-              strokeWidth={vbWidth * 0.0024 * (sel ? 2.2 : 1)}
+              strokeWidth={
+                vbWidth * 0.0024 * (sel ? 2.2 : 1) * pinS
+              }
             />
             <text
               y={fontAbility * 0.35}
@@ -666,17 +686,19 @@ export function StratStageEditor({
                 x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
                 y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
                 stroke="rgba(34, 211, 238, 0.7)"
-                strokeWidth={Math.max(vbWidth * 0.0018, 0.85)}
+                strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
                 strokeDasharray="6 5"
                 pointerEvents="none"
               />
               <circle
                 cx={pos.x}
                 cy={pos.y}
-                r={Math.max(vbWidth * 0.01, 5)}
+                r={Math.max(vbWidth * 0.01, 5) * pinS}
                 fill="rgb(250, 204, 21)"
                 stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
-                strokeWidth={Math.max(vbWidth * 0.0024, 1) * (sel ? 2.2 : 1)}
+                strokeWidth={
+                  Math.max(vbWidth * 0.0024, 1) * (sel ? 2.2 : 1) * pinS
+                }
                 style={{
                   cursor: placementMode ? "default" : "grab",
                   touchAction: "none",
@@ -701,10 +723,12 @@ export function StratStageEditor({
               <circle
                 cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
                 cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
-                r={Math.max(vbWidth * 0.009, 4.5)}
+                r={Math.max(vbWidth * 0.009, 4.5) * pinS}
                 fill="rgb(34, 211, 238)"
                 stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
-                strokeWidth={Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1)}
+                strokeWidth={
+                  Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1) * pinS
+                }
                 style={{
                   cursor: placementMode ? "default" : "grab",
                   touchAction: "none",
@@ -758,6 +782,7 @@ export function StratStageEditor({
         agents={activeStage.agents}
         roster={roster}
         transition={agentStageTrans}
+        pinScale={mapPinScale}
         interactive={{
           placementModeBlocks: placementMode != null,
           selectedId,
@@ -828,6 +853,38 @@ export function StratStageEditor({
           >
             Tokens
           </button>
+        </div>
+
+        <div className="mt-3 rounded-lg border border-violet-800/40 bg-slate-950/50 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <label
+              className="text-xs font-medium text-violet-200/90"
+              htmlFor="coach-map-pin-scale"
+            >
+              Map pin size
+            </label>
+            <span className="tabular-nums text-xs text-violet-400/90">
+              {Math.round(mapPinScale * 100)}%
+            </span>
+          </div>
+          <input
+            id="coach-map-pin-scale"
+            type="range"
+            min={Math.round(COACH_MAP_PIN_SCALE_MIN * 100)}
+            max={Math.round(COACH_MAP_PIN_SCALE_MAX * 100)}
+            step={1}
+            value={Math.round(mapPinScale * 100)}
+            onChange={(e) => {
+              const v = clampCoachMapPinScale(Number(e.target.value) / 100);
+              setMapPinScale(v);
+              writeCoachMapPinScale(v);
+            }}
+            className="mt-2 h-2 w-full cursor-pointer accent-violet-500"
+          />
+          <p className="mt-1.5 text-[10px] leading-snug text-violet-500/70">
+            Live on the map. Saved in this browser; public view uses the same
+            setting.
+          </p>
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 [scrollbar-gutter:stable]">

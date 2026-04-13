@@ -30,6 +30,10 @@ import {
   rectangleStratPivotBlueprint,
   stratAnchorOverrideForBlueprint,
 } from "@/lib/strat-blueprint-map-point";
+import {
+  clampCoachMapPinScale,
+  stratAbilityPinDimensions,
+} from "@/lib/strat-map-pin-scale";
 
 export function StratStagePinsReadonly({
   vb,
@@ -39,6 +43,7 @@ export function StratStagePinsReadonly({
   compSlugs,
   agentsCatalog,
   agentTransition,
+  pinScale = 1,
 }: {
   vb: ViewBoxRect;
   vbWidth: number;
@@ -48,6 +53,8 @@ export function StratStagePinsReadonly({
   agentsCatalog: Agent[];
   /** When the viewed stage tab changes, animate agent tokens from the previous stage. */
   agentTransition?: StratAgentTokenTransition;
+  /** Coach / saved browser preference (default 1). */
+  pinScale?: number;
 }) {
   const roster = useMemo(() => {
     const slugs = compSlugs.map((s) => s.trim()).filter(Boolean);
@@ -75,8 +82,11 @@ export function StratStagePinsReadonly({
       );
   }, [compSlugs, agentsCatalog]);
 
-  const abilityR = vbWidth * 0.012;
-  const fontAbility = Math.max(9, vbWidth * 0.013);
+  const pinS = clampCoachMapPinScale(pinScale);
+  const { abilityR, fontAbility } = stratAbilityPinDimensions(
+    vbWidth,
+    pinScale,
+  );
 
   const [valorantAbilityUi, setValorantAbilityUi] = useState<
     Record<string, ValorantAbilityUiMeta[]>
@@ -110,7 +120,7 @@ export function StratStagePinsReadonly({
           bp != null &&
           bp.shapeKind === "rectangle" &&
           bp.geometry.kind === "rectangle";
-        const rotDist = stratAbilityRotationHandleDistance(vbWidth);
+        const rotDist = stratAbilityRotationHandleDistance(vbWidth) * pinS;
         const rotStored = stratAbilityRotationHandleStored(
           { x: ab.x, y: ab.y },
           ab.rotationDeg ?? 0,
@@ -141,6 +151,7 @@ export function StratStagePinsReadonly({
                 rotationDeg={ab.rotationDeg ?? 0}
                 pointerEvents="none"
                 stratAnchorOverride={stratOv}
+                mapPinScale={pinScale}
                 abilityDisplayIconUrl={
                   bp.shapeKind === "point"
                     ? abilityMetaForSlot(
@@ -157,7 +168,7 @@ export function StratStagePinsReadonly({
                   r={abilityR}
                   fill={st.fill}
                   stroke={st.stroke}
-                  strokeWidth={vbWidth * 0.0024}
+                  strokeWidth={vbWidth * 0.0024 * pinS}
                 />
                 <text
                   y={fontAbility * 0.35}
@@ -181,24 +192,24 @@ export function StratStagePinsReadonly({
                   x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
                   y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
                   stroke="rgba(34, 211, 238, 0.55)"
-                  strokeWidth={Math.max(vbWidth * 0.0016, 0.75)}
+                  strokeWidth={Math.max(vbWidth * 0.0016, 0.75) * pinS}
                   strokeDasharray="5 4"
                 />
                 <circle
                   cx={pos.x}
                   cy={pos.y}
-                  r={Math.max(vbWidth * 0.007, 3.5)}
+                  r={Math.max(vbWidth * 0.007, 3.5) * pinS}
                   fill="rgb(250, 204, 21)"
                   stroke="rgb(15, 23, 42)"
-                  strokeWidth={Math.max(vbWidth * 0.0018, 0.8)}
+                  strokeWidth={Math.max(vbWidth * 0.0018, 0.8) * pinS}
                 />
                 <circle
                   cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
                   cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
-                  r={Math.max(vbWidth * 0.0065, 3)}
+                  r={Math.max(vbWidth * 0.0065, 3) * pinS}
                   fill="rgb(34, 211, 238)"
                   stroke="rgb(15, 23, 42)"
-                  strokeWidth={Math.max(vbWidth * 0.0016, 0.75)}
+                  strokeWidth={Math.max(vbWidth * 0.0016, 0.75) * pinS}
                 />
               </g>
             ) : null}
@@ -212,6 +223,7 @@ export function StratStagePinsReadonly({
         agents={stage.agents}
         roster={roster}
         transition={agentTransition ?? null}
+        pinScale={pinScale}
         pointerEventsNoneOnText
       />
     </g>

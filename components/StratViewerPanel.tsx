@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Agent, GameMap } from "@/types/catalog";
 import type { StratSide, StratStage } from "@/types/strat";
 import { StratMapViewer } from "@/components/StratMapViewer";
 import { StratStagePinsReadonly } from "@/components/StratStagePinsReadonly";
 import type { StratAgentTokenTransition } from "@/components/StratStageAgentTokens";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
+import {
+  COACH_MAP_PIN_SCALE_DEFAULT,
+  readCoachMapPinScale,
+} from "@/lib/strat-map-pin-scale";
 
 /**
  * Public / modal view: map layers with layer toggles (same controls as coach) plus
@@ -38,6 +42,18 @@ export function StratViewerPanel({
   );
   const vbWidth = vb.width;
 
+  const [pinScale, setPinScale] = useState(COACH_MAP_PIN_SCALE_DEFAULT);
+  useEffect(() => {
+    setPinScale(readCoachMapPinScale());
+    const sync = () => setPinScale(readCoachMapPinScale());
+    window.addEventListener("storage", sync);
+    window.addEventListener("valo-strats:coach-map-pin-scale", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("valo-strats:coach-map-pin-scale", sync);
+    };
+  }, []);
+
   return (
     <StratMapViewer
       gameMap={gameMap}
@@ -54,6 +70,7 @@ export function StratViewerPanel({
         compSlugs={compSlugs}
         agentsCatalog={agentsCatalog}
         agentTransition={agentTransition}
+        pinScale={pinScale}
       />
     </StratMapViewer>
   );

@@ -9,6 +9,7 @@ import {
 import type { StratPlacedAgent, StratSide, StratStage, StratStageTransition } from "@/types/strat";
 import type { ViewBoxRect } from "@/lib/map-path";
 import { stratStagePinForDisplay } from "@/lib/strat-stage-coords";
+import { stratAgentTokenDimensions } from "@/lib/strat-map-pin-scale";
 import { StratAgentMapPinSvg } from "@/components/StratAgentMapPinSvg";
 import { abbrevAgentName, roleAccent } from "@/lib/strat-stage-pin-styles";
 
@@ -48,6 +49,7 @@ export function StratStageAgentTokens({
   transition,
   interactive,
   pointerEventsNoneOnText,
+  pinScale = 1,
 }: {
   vb: ViewBoxRect;
   vbWidth: number;
@@ -57,9 +59,10 @@ export function StratStageAgentTokens({
   transition: StratAgentTokenTransition;
   interactive?: Interactive;
   pointerEventsNoneOnText?: boolean;
+  /** Coach / viewer: multiplier for token radius and label (default 1). */
+  pinScale?: number;
 }) {
-  const tokenR = vbWidth * 0.018;
-  const fontAgent = Math.max(10, vbWidth * 0.016);
+  const { tokenR, fontAgent } = stratAgentTokenDimensions(vbWidth, pinScale);
 
   const [animArmed, setAnimArmed] = useState(false);
   const [exitingAgents, setExitingAgents] = useState<StratPlacedAgent[]>([]);

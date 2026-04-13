@@ -128,6 +128,7 @@ export function StratAbilityBlueprintSvg({
    * point instead of `blueprint.origin` / bbox center.
    */
   stratAnchorOverride,
+  mapPinScale = 1,
 }: {
   blueprint: AgentAbilityBlueprint;
   mapX: number;
@@ -139,12 +140,16 @@ export function StratAbilityBlueprintSvg({
   pointerEvents?: "none" | "auto";
   abilityDisplayIconUrl?: string | null;
   stratAnchorOverride?: { x: number; y: number } | null;
+  /** Coach preference: scales blueprint on the strat map (default 1). */
+  mapPinScale?: number;
 }) {
   const g = blueprint.geometry;
   const stroke = blueprint.color;
   const fill = `${blueprint.color}44`;
   const anchor = stratAnchorOverride ?? blueprintStratAnchor(blueprint);
-  const scale = stratBlueprintUnitsToMapScale(vbWidth);
+  const scale =
+    stratBlueprintUnitsToMapScale(vbWidth) *
+    (Number.isFinite(mapPinScale) ? mapPinScale : 1);
   const swMap =
     Math.max(vbWidth * 0.0016, 1.25) *
     (selected ? 1.35 : 1) *
