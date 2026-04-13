@@ -26,7 +26,7 @@ import {
 } from "@/lib/strat-ability-rotation-handle";
 import {
   blueprintPointToStratMapDisplay,
-  rectanglePlacementEdgeBlueprint,
+  rectangleStratPivotBlueprint,
   stratAnchorOverrideForBlueprint,
 } from "@/lib/strat-blueprint-map-point";
 
@@ -140,10 +140,10 @@ export function StratStagePinsReadonly({
           rotDist,
         );
         const rotPos = stratStagePinForDisplay(vb, side, rotStored);
-        const edgePos =
+        const rectCenterPos =
           isRectOD && bp && bp.geometry.kind === "rectangle"
             ? blueprintPointToStratMapDisplay(
-                rectanglePlacementEdgeBlueprint(bp.geometry),
+                rectangleStratPivotBlueprint(bp.geometry),
                 bp,
                 pos.x,
                 pos.y,
@@ -199,25 +199,25 @@ export function StratStagePinsReadonly({
             {useTwoHandles ? (
               <g pointerEvents="none">
                 <line
-                  x1={isRectOD && edgePos ? edgePos.x : pos.x}
-                  y1={isRectOD && edgePos ? edgePos.y : pos.y}
-                  x2={isRectOD ? pos.x : rotPos.x}
-                  y2={isRectOD ? pos.y : rotPos.y}
+                  x1={pos.x}
+                  y1={pos.y}
+                  x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
+                  y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
                   stroke="rgba(34, 211, 238, 0.55)"
                   strokeWidth={Math.max(vbWidth * 0.0016, 0.75)}
                   strokeDasharray="5 4"
                 />
                 <circle
-                  cx={isRectOD && edgePos ? edgePos.x : pos.x}
-                  cy={isRectOD && edgePos ? edgePos.y : pos.y}
+                  cx={pos.x}
+                  cy={pos.y}
                   r={Math.max(vbWidth * 0.007, 3.5)}
                   fill="rgb(250, 204, 21)"
                   stroke="rgb(15, 23, 42)"
                   strokeWidth={Math.max(vbWidth * 0.0018, 0.8)}
                 />
                 <circle
-                  cx={isRectOD ? pos.x : rotPos.x}
-                  cy={isRectOD ? pos.y : rotPos.y}
+                  cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
+                  cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
                   r={Math.max(vbWidth * 0.0065, 3)}
                   fill="rgb(34, 211, 238)"
                   stroke="rgb(15, 23, 42)"

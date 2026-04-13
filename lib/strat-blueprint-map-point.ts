@@ -31,7 +31,7 @@ export function blueprintPointToStratMapDisplay(
   return { x: v2.x + mapX, y: v2.y + mapY };
 }
 
-/** Strat map pivot: geometric center of the rectangle (blueprint space). */
+/** Geometric center of the rectangle (blueprint space) — cyan rotation handle. */
 export function rectangleStratPivotBlueprint(
   g: Extract<AgentAbilityGeometry, { kind: "rectangle" }>,
 ): MapPoint {
@@ -40,7 +40,7 @@ export function rectangleStratPivotBlueprint(
 
 /**
  * Midpoint of the outer "bottom" edge (max Y in local rect space), after the rect's
- * own `rotationDeg` in blueprint space — i.e. the edge you'd treat as the placement foot.
+ * own `rotationDeg` in blueprint space — yellow placement / strat map pin / rotation pivot.
  */
 export function rectanglePlacementEdgeBlueprint(
   g: Extract<AgentAbilityGeometry, { kind: "rectangle" }>,
@@ -60,12 +60,15 @@ export function rectanglePlacementEdgeBlueprint(
   return { x: cx + vx, y: cy + vy };
 }
 
-/** Use geometric center as strat anchor so rotation is around the rectangle center. */
+/**
+ * Rectangle: strat map pin and transform anchor = placement edge (yellow dot).
+ * Rotation on the map is around this point; cyan handle sits at the rect center.
+ */
 export function stratAnchorOverrideForBlueprint(
   blueprint: AgentAbilityBlueprint,
 ): { x: number; y: number } | undefined {
   if (blueprint.shapeKind !== "rectangle") return undefined;
   const g = blueprint.geometry;
   if (g.kind !== "rectangle") return undefined;
-  return rectangleStratPivotBlueprint(g);
+  return rectanglePlacementEdgeBlueprint(g);
 }
