@@ -1,4 +1,4 @@
-import type { Agent } from "@/types/catalog";
+import type { Agent, GameMap } from "@/types/catalog";
 import type {
   AgentAbilityBlueprint,
   AgentAbilityGeometry,
@@ -278,6 +278,7 @@ export function appendPlacedAbilitiesVisionBlockers(
     /** Stage agent tokens (for abilities with `attachedToAgentId`). */
     stageAgents: StratPlacedAgent[];
     agentsCatalog: Agent[];
+    gameMap: GameMap;
     vb: ViewBoxRect;
     side: StratSide;
     vbWidth: number;
@@ -307,7 +308,7 @@ export function appendPlacedAbilitiesVisionBlockers(
     if (!bp || bp.blocksVision !== true) continue;
 
     const st = resolvedPlacedAbilityStoredPosition(ab, input.stageAgents);
-    const pos = stratStagePinForDisplay(input.vb, input.side, {
+    const pos = stratStagePinForDisplay(input.vb, input.side, input.gameMap, {
       x: st.x,
       y: st.y,
     });

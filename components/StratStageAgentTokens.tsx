@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import type { GameMap } from "@/types/catalog";
 import type { StratPlacedAgent, StratSide, StratStage, StratStageTransition } from "@/types/strat";
 import type { ViewBoxRect } from "@/lib/map-path";
 import { stratStagePinForDisplay } from "@/lib/strat-stage-coords";
@@ -44,6 +45,7 @@ export function StratStageAgentTokens({
   vb,
   vbWidth,
   side,
+  gameMap,
   agents,
   roster,
   transition,
@@ -54,6 +56,7 @@ export function StratStageAgentTokens({
   vb: ViewBoxRect;
   vbWidth: number;
   side: StratSide;
+  gameMap: GameMap;
   agents: StratPlacedAgent[];
   roster: StratAgentTokenRosterEntry[];
   transition: StratAgentTokenTransition;
@@ -138,12 +141,15 @@ export function StratStageAgentTokens({
         const abbr = meta
           ? abbrevAgentName(meta.name)
           : a.agentSlug.slice(0, 2).toUpperCase();
-        const pos = stratStagePinForDisplay(vb, side, { x: a.x, y: a.y });
+        const pos = stratStagePinForDisplay(vb, side, gameMap, {
+          x: a.x,
+          y: a.y,
+        });
         const prev = transition?.fromStage.agents.find(
           (p) => p.agentSlug === a.agentSlug,
         );
         const prevPos = prev
-          ? stratStagePinForDisplay(vb, side, { x: prev.x, y: prev.y })
+          ? stratStagePinForDisplay(vb, side, gameMap, { x: prev.x, y: prev.y })
           : null;
         const dx = prevPos ? prevPos.x - pos.x : 0;
         const dy = prevPos ? prevPos.y - pos.y : 0;
@@ -204,7 +210,10 @@ export function StratStageAgentTokens({
         const abbr = meta
           ? abbrevAgentName(meta.name)
           : a.agentSlug.slice(0, 2).toUpperCase();
-        const pos = stratStagePinForDisplay(vb, side, { x: a.x, y: a.y });
+        const pos = stratStagePinForDisplay(vb, side, gameMap, {
+          x: a.x,
+          y: a.y,
+        });
         const exitMs = exitMsRef.current;
         const exitEase = `${exitMs}ms ease-out`;
         const innerStyle: CSSProperties = {

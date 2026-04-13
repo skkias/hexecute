@@ -119,6 +119,7 @@ export function StratStagePinsReadonly({
       placedAbilities: stage.abilities,
       stageAgents: stage.agents,
       agentsCatalog,
+      gameMap,
       vb,
       side,
       vbWidth,
@@ -129,6 +130,7 @@ export function StratStagePinsReadonly({
     stage.abilities,
     stage.agents,
     agentsCatalog,
+    gameMap,
     vb,
     side,
     vbWidth,
@@ -144,6 +146,7 @@ export function StratStagePinsReadonly({
           placedAbilities: stage.abilities,
           stageAgents: stage.agents,
           agentsCatalog,
+          gameMap,
           vb,
           side,
           vbWidth,
@@ -158,6 +161,7 @@ export function StratStagePinsReadonly({
     stage.abilities,
     stage.agents,
     agentsCatalog,
+    gameMap,
     vb,
     side,
     vbWidth,
@@ -169,7 +173,7 @@ export function StratStagePinsReadonly({
       {stage.agents
         .filter((a) => a.visionConeWidth)
         .map((agent) => {
-          const pos = stratStagePinForDisplay(vb, side, {
+          const pos = stratStagePinForDisplay(vb, side, gameMap, {
             x: agent.x,
             y: agent.y,
           });
@@ -209,7 +213,10 @@ export function StratStagePinsReadonly({
           agentsCatalog.find((a) => a.slug === ab.agentSlug)?.theme_color ??
           "rgb(34,211,238)";
         const st = resolvedPlacedAbilityStoredPosition(ab, stage.agents);
-        const pos = stratStagePinForDisplay(vb, side, { x: st.x, y: st.y });
+        const pos = stratStagePinForDisplay(vb, side, gameMap, {
+          x: st.x,
+          y: st.y,
+        });
         const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
         const stratOv = bp ? stratAnchorOverrideForBlueprint(bp) : undefined;
 
@@ -267,6 +274,7 @@ export function StratStagePinsReadonly({
         vb={vb}
         vbWidth={vbWidth}
         side={side}
+        gameMap={gameMap}
         agents={stage.agents}
         roster={roster}
         transition={agentTransition ?? null}

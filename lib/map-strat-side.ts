@@ -1,11 +1,13 @@
 import type { GameMap } from "@/types/catalog";
 import type { StratSide } from "@/types/strat";
 import {
-  flipPointsOverVerticalMidline,
+  defenseRingsFromAttack,
+  flipPointsThroughViewBoxCenter,
   parsePathToRings,
   ringsToPathD,
   type ViewBoxRect,
 } from "@/lib/map-path";
+import { stratSideDisplayFlip } from "@/lib/strat-side-display-geometry";
 import { parseViewBox } from "@/lib/view-box";
 
 function viewBoxRectFromMap(map: GameMap): ViewBoxRect {
@@ -25,19 +27,38 @@ export function outlinePathForStratSide(
   return side === "atk" ? map.path_def : map.path_atk;
 }
 
+/**
+ * Outline for the strat viewer: matches MapShapeEditor “Swap sides” (180° about center) for
+ * defense on normal maps; uses saved `path_def` (horizontal mirror) when invert-meaning
+ * attack strats reference the mirrored ring.
+ */
 export function outlinePathForStratDisplay(
   map: GameMap,
   side: StratSide,
 ): string | null {
-  const atkPath = outlinePathForStratSide(map, "atk");
-  if (side === "atk" || !atkPath?.trim()) return atkPath;
+  const mode = stratSideDisplayFlip(map, side);
+  const atk = map.path_atk?.trim() ? map.path_atk : null;
+  if (!atk) return null;
+
+  if (mode === "none") return atk;
+  if (mode === "horizontal") {
+    if (map.path_def?.trim()) return map.path_def;
+    const vb = viewBoxRectFromMap(map);
+    const rings = parsePathToRings(atk);
+    const outer = rings[0] ?? [];
+    const holes = rings.slice(1);
+    if (outer.length < 3) return atk;
+    const d = defenseRingsFromAttack(vb, outer, holes);
+    return ringsToPathD(d.outer, d.holes);
+  }
+
   const vb = viewBoxRectFromMap(map);
-  const rings = parsePathToRings(atkPath);
-  if (rings.length === 0) return atkPath;
+  const rings = parsePathToRings(atk);
+  if (rings.length === 0) return atk;
   const outer0 = rings[0];
-  if (!outer0 || outer0.length < 3) return atkPath;
-  const mirrored = rings.map((ring) => flipPointsOverVerticalMidline(vb, ring));
-  const outer = mirrored[0] ?? [];
-  const holes = mirrored.slice(1);
+  if (!outer0 || outer0.length < 3) return atk;
+  const flipped = rings.map((ring) => flipPointsThroughViewBoxCenter(vb, ring));
+  const outer = flipped[0] ?? [];
+  const holes = flipped.slice(1);
   return ringsToPathD(outer, holes);
 }

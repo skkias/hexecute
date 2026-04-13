@@ -323,6 +323,7 @@ export function StratStageEditor({
       placedAbilities: activeStage?.abilities ?? [],
       stageAgents: activeStage?.agents ?? [],
       agentsCatalog,
+      gameMap,
       vb,
       side,
       vbWidth,
@@ -333,6 +334,7 @@ export function StratStageEditor({
     activeStage?.abilities,
     activeStage?.agents,
     agentsCatalog,
+    gameMap,
     vb,
     side,
     vbWidth,
@@ -349,6 +351,7 @@ export function StratStageEditor({
           placedAbilities: placed,
           stageAgents: activeStage?.agents ?? [],
           agentsCatalog,
+          gameMap,
           vb,
           side,
           vbWidth,
@@ -363,6 +366,7 @@ export function StratStageEditor({
     activeStage?.abilities,
     activeStage?.agents,
     agentsCatalog,
+    gameMap,
     vb,
     side,
     vbWidth,
@@ -387,6 +391,7 @@ export function StratStageEditor({
       const ray = stratAgentVisionConeRayInDisplay({
         vb,
         side,
+        gameMap,
         vbWidth,
         pinS,
         agent,
@@ -418,6 +423,7 @@ export function StratStageEditor({
       svgPointerToLogical,
       vb,
       side,
+      gameMap,
       vbWidth,
       mapPinScale,
       visionLosContextMerged,
@@ -550,11 +556,13 @@ export function StratStageEditor({
           ? stratStagePinToStoredAttack(
               vb,
               side,
+              gameMap,
               clampPointToViewBox(vb, raw),
             )
           : stratStagePinToStoredAttack(
               vb,
               side,
+              gameMap,
               clampPointToViewBox(vb, {
                 x: raw.x - drag.grabDx,
                 y: raw.y - drag.grabDy,
@@ -610,6 +618,7 @@ export function StratStageEditor({
         const ray = stratAgentVisionConeRayInDisplay({
           vb,
           side,
+          gameMap,
           vbWidth,
           pinS,
           agent: aNext,
@@ -675,6 +684,7 @@ export function StratStageEditor({
     activeStageIndex,
     vb,
     side,
+    gameMap,
     patchStage,
     setAgents,
     setAbilities,
@@ -689,7 +699,7 @@ export function StratStageEditor({
     if (!placementMode || !svgRef.current || !activeStage) return;
     const raw = svgPointerToLogical(svgRef.current, e.clientX, e.clientY);
     const pDisplay = clampPointToViewBox(vb, raw);
-    const p = stratStagePinToStoredAttack(vb, side, pDisplay);
+    const p = stratStagePinToStoredAttack(vb, side, gameMap, pDisplay);
     if (placementMode.kind === "agent") {
       if (
         activeStage.agents.some((x) => x.agentSlug === placementMode.slug)
@@ -924,6 +934,7 @@ export function StratStageEditor({
               ? stratStagePinForDisplay(
                   vb,
                   side,
+                  gameMap,
                   placementMode.pendingOriginAttack,
                 ).x
               : (() => {
@@ -933,7 +944,7 @@ export function StratStageEditor({
                     selectedId,
                   );
                   return ag
-                    ? stratStagePinForDisplay(vb, side, {
+                    ? stratStagePinForDisplay(vb, side, gameMap, {
                         x: ag.x,
                         y: ag.y,
                       }).x
@@ -945,6 +956,7 @@ export function StratStageEditor({
               ? stratStagePinForDisplay(
                   vb,
                   side,
+                  gameMap,
                   placementMode.pendingOriginAttack,
                 ).y
               : (() => {
@@ -954,7 +966,7 @@ export function StratStageEditor({
                     selectedId,
                   );
                   return ag
-                    ? stratStagePinForDisplay(vb, side, {
+                    ? stratStagePinForDisplay(vb, side, gameMap, {
                         x: ag.x,
                         y: ag.y,
                       }).y
@@ -974,7 +986,7 @@ export function StratStageEditor({
           const w = agent.visionConeWidth!;
           const rot = agent.visionConeRotationDeg ?? 0;
           const sel = selectedId === agent.id;
-          const pos = stratStagePinForDisplay(vb, side, {
+          const pos = stratStagePinForDisplay(vb, side, gameMap, {
             x: agent.x,
             y: agent.y,
           });
@@ -1000,6 +1012,7 @@ export function StratStageEditor({
           const ray = stratAgentVisionConeRayInDisplay({
             vb,
             side,
+            gameMap,
             vbWidth,
             pinS,
             agent,
@@ -1119,7 +1132,7 @@ export function StratStageEditor({
           ab,
           activeStage.agents,
         );
-        const pos = stratStagePinForDisplay(vb, side, stPos);
+        const pos = stratStagePinForDisplay(vb, side, gameMap, stPos);
         const isAttached = Boolean(ab.attachedToAgentId);
         const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
         const useTwoHandles =
@@ -1138,7 +1151,7 @@ export function StratStageEditor({
           ab.rotationDeg ?? 0,
           rotDist,
         );
-        const rotPos = stratStagePinForDisplay(vb, side, rotStored);
+        const rotPos = stratStagePinForDisplay(vb, side, gameMap, rotStored);
         const accentColor = bp?.color ?? "rgb(34, 211, 238)";
         /** Rectangle: cyan handle at geometric center; map pin (pos) is yellow edge. */
         const rectCenterPos =
@@ -1364,6 +1377,7 @@ export function StratStageEditor({
         vb={vb}
         vbWidth={vbWidth}
         side={side}
+        gameMap={gameMap}
         agents={activeStage.agents}
         roster={roster}
         transition={agentStageTrans}

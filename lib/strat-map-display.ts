@@ -7,6 +7,7 @@ import type {
 import type { StratSide } from "@/types/strat";
 import {
   transformLocationLabelForHorizontalMidlineFlip,
+  transformLocationLabelForViewBoxCenterFlip,
 } from "@/lib/map-label-layout";
 import {
   circleToGradeClosedPoints,
@@ -14,9 +15,11 @@ import {
 } from "@/lib/map-overlay-geometry";
 import {
   flipPointsOverHorizontalMidline,
+  flipPointsThroughViewBoxCenter,
   type ViewBoxRect,
 } from "@/lib/map-path";
 import { normalizeEditorMeta } from "@/lib/map-editor-meta";
+import { stratSideDisplayFlip } from "@/lib/strat-side-display-geometry";
 import { parseViewBox } from "@/lib/view-box";
 
 export function viewBoxRectFromMap(map: GameMap): ViewBoxRect {
@@ -25,8 +28,9 @@ export function viewBoxRectFromMap(map: GameMap): ViewBoxRect {
 }
 
 /**
- * Map data is stored in attack-side viewBox coordinates. Defense view mirrors across
- * the horizontal midline (top/bottom swap around the map center).
+ * Map data is stored in attack-side viewBox coordinates. Defense strats (normal meaning)
+ * use the same 180° flip as MapShapeEditor “Swap sides”. Inverted-meaning attack strats
+ * use the horizontal mirror that matches saved `path_def`.
  */
 export function stratMapDisplayData(
   map: GameMap,
@@ -41,10 +45,9 @@ export function stratMapDisplayData(
   const vb = viewBoxRectFromMap(map);
   const rect = vb;
   const extra = map.extra_paths ?? [];
-  const meaningInverted = em.side_meaning_inverted === true;
-  const shouldFlipForSide = meaningInverted ? side === "atk" : side === "def";
+  const flipMode = stratSideDisplayFlip(map, side);
 
-  if (!shouldFlipForSide) {
+  if (flipMode === "none") {
     return {
       vb,
       overlays: extra,
@@ -53,6 +56,13 @@ export function stratMapDisplayData(
     };
   }
 
+  const flipPoint =
+    flipMode === "center"
+      ? (p: { x: number; y: number }) =>
+          flipPointsThroughViewBoxCenter(rect, [p])[0]!
+      : (p: { x: number; y: number }) =>
+          flipPointsOverHorizontalMidline(rect, [p])[0]!;
+
   const flipOverlay = (s: MapOverlayShape): MapOverlayShape => {
     const gradeSide =
       s.kind === "grade"
@@ -60,7 +70,7 @@ export function stratMapDisplayData(
         : undefined;
     if (isCircleOverlay(s) && s.circle) {
       const c = s.circle;
-      const q = flipPointsOverHorizontalMidline(rect, [{ x: c.cx, y: c.cy }])[0]!;
+      const q = flipPoint({ x: c.cx, y: c.cy });
       const nc = { cx: q.x, cy: q.y, r: c.r };
       if (s.kind === "grade") {
         return {
@@ -73,7 +83,10 @@ export function stratMapDisplayData(
       return { ...s, circle: nc, points: [] };
     }
     if (s.kind === "rope") {
-      const flipped = flipPointsOverHorizontalMidline(rect, s.points);
+      const flipped =
+        flipMode === "center"
+          ? flipPointsThroughViewBoxCenter(rect, s.points)
+          : flipPointsOverHorizontalMidline(rect, s.points);
       const e0 = flipped[0];
       const e1 = flipped[flipped.length - 1];
       return {
@@ -82,25 +95,38 @@ export function stratMapDisplayData(
         ...(e0 && e1 ? { enter: e0, exit: e1 } : {}),
       };
     }
+    const flippedPts =
+      flipMode === "center"
+        ? flipPointsThroughViewBoxCenter(rect, s.points)
+        : flipPointsOverHorizontalMidline(rect, s.points);
     return {
       ...s,
-      points: flipPointsOverHorizontalMidline(rect, s.points),
+      points: flippedPts,
       ...(s.kind === "grade" && gradeSide !== undefined
         ? { gradeHighSide: gradeSide }
         : {}),
     };
   };
 
+  const labelXform =
+    flipMode === "center"
+      ? (l: MapLocationLabel) =>
+          transformLocationLabelForViewBoxCenterFlip(rect, rect.width, l, {
+            collapseReadableRotation: false,
+          })
+      : (l: MapLocationLabel) =>
+          transformLocationLabelForHorizontalMidlineFlip(rect, rect.width, l);
+
   return {
     vb,
     overlays: extra.map(flipOverlay),
     spawn_markers: em.spawn_markers.map((s) => {
-      const q = flipPointsOverHorizontalMidline(rect, [{ x: s.x, y: s.y }])[0]!;
+      const q = flipPoint({ x: s.x, y: s.y });
       return { ...s, x: q.x, y: q.y };
     }),
     location_labels: em.location_labels.map((l) => ({
       ...l,
-      ...transformLocationLabelForHorizontalMidlineFlip(rect, rect.width, l),
+      ...labelXform(l),
     })),
   };
 }

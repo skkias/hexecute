@@ -9,6 +9,7 @@ import {
   isVisionOriginInPlayable,
   type VisionLosContext,
 } from "@/lib/vision-cone-los";
+import type { GameMap } from "@/types/catalog";
 import type {
   StratPlacedAgent,
   StratSide,
@@ -62,6 +63,7 @@ export function stratAgentVisionConeDisplayHints(
 export function stratAgentVisionConeRayInDisplay(args: {
   vb: ViewBoxRect;
   side: StratSide;
+  gameMap: GameMap;
   vbWidth: number;
   /** Coach pin scale (`clampCoachMapPinScale(mapPinScale)`), same as wedge rendering. */
   pinS: number;
@@ -69,8 +71,12 @@ export function stratAgentVisionConeRayInDisplay(args: {
   width: StratVisionConeWidth;
   visionLosContext: VisionLosContext | null;
 }): { pos: MapPoint; rayEnd: MapPoint; dir: MapPoint; lenRay: number } {
-  const { vb, side, vbWidth, pinS, agent, width, visionLosContext } = args;
-  const pos = stratStagePinForDisplay(vb, side, { x: agent.x, y: agent.y });
+  const { vb, side, gameMap, vbWidth, pinS, agent, width, visionLosContext } =
+    args;
+  const pos = stratStagePinForDisplay(vb, side, gameMap, {
+    x: agent.x,
+    y: agent.y,
+  });
   const rot = agent.visionConeRotationDeg ?? 0;
   const rotRad = (rot * Math.PI) / 180;
   const sh = stratAgentVisionConeDisplayHints(
