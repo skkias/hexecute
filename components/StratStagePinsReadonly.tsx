@@ -19,6 +19,11 @@ import {
   fetchValorantAbilityUiBySlug,
   type ValorantAbilityUiMeta,
 } from "@/lib/valorant-api-abilities";
+import { effectiveStratPlacementMode } from "@/lib/strat-blueprint-anchor";
+import {
+  stratAbilityRotationHandleDistance,
+  stratAbilityRotationHandleStored,
+} from "@/lib/strat-ability-rotation-handle";
 
 export function StratStagePinsReadonly({
   vb,
@@ -115,6 +120,16 @@ export function StratStagePinsReadonly({
         const st = abilitySlotStyle(ab.slot);
         const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });
         const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
+        const useTwoHandles =
+          bp != null && effectiveStratPlacementMode(bp) === "origin_direction";
+        const rotDist = stratAbilityRotationHandleDistance(vbWidth);
+        const rotStored = stratAbilityRotationHandleStored(
+          { x: ab.x, y: ab.y },
+          ab.rotationDeg ?? 0,
+          rotDist,
+        );
+        const rotPos = stratStagePinForDisplay(vb, side, rotStored);
+
         return (
           <g key={ab.id}>
             {bp ? (
@@ -157,6 +172,35 @@ export function StratStagePinsReadonly({
                 </text>
               </g>
             )}
+            {useTwoHandles ? (
+              <g pointerEvents="none">
+                <line
+                  x1={pos.x}
+                  y1={pos.y}
+                  x2={rotPos.x}
+                  y2={rotPos.y}
+                  stroke="rgba(34, 211, 238, 0.55)"
+                  strokeWidth={Math.max(vbWidth * 0.0016, 0.75)}
+                  strokeDasharray="5 4"
+                />
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r={Math.max(vbWidth * 0.007, 3.5)}
+                  fill="rgb(250, 204, 21)"
+                  stroke="rgb(15, 23, 42)"
+                  strokeWidth={Math.max(vbWidth * 0.0018, 0.8)}
+                />
+                <circle
+                  cx={rotPos.x}
+                  cy={rotPos.y}
+                  r={Math.max(vbWidth * 0.0065, 3)}
+                  fill="rgb(34, 211, 238)"
+                  stroke="rgb(15, 23, 42)"
+                  strokeWidth={Math.max(vbWidth * 0.0016, 0.75)}
+                />
+              </g>
+            ) : null}
           </g>
         );
       })}

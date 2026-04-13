@@ -45,6 +45,10 @@ import {
   stratStagePinToStoredAttack,
 } from "@/lib/strat-stage-coords";
 import { effectiveStratPlacementMode } from "@/lib/strat-blueprint-anchor";
+import {
+  stratAbilityRotationHandleDistance,
+  stratAbilityRotationHandleStored,
+} from "@/lib/strat-ability-rotation-handle";
 
 type PlacementMode =
   | null
@@ -59,10 +63,29 @@ type PlacementMode =
 
 type DragState =
   | {
-      kind: "agent" | "ability";
+      kind: "agent";
       id: string;
       grabDx: number;
       grabDy: number;
+      pointerId: number;
+    }
+  | {
+      kind: "ability";
+      id: string;
+      grabDx: number;
+      grabDy: number;
+      pointerId: number;
+    }
+  | {
+      kind: "abilityOrigin";
+      id: string;
+      grabDx: number;
+      grabDy: number;
+      pointerId: number;
+    }
+  | {
+      kind: "abilityRotate";
+      id: string;
       pointerId: number;
     }
   | null;
@@ -333,11 +356,21 @@ export function StratStageEditor({
       const svg = svgRef.current;
       if (!svg || !activeStage) return;
       const raw = svgPointerToLogical(svg, e.clientX, e.clientY);
-      const pDisplay = clampPointToViewBox(vb, {
-        x: raw.x - drag.grabDx,
-        y: raw.y - drag.grabDy,
-      });
-      const p = stratStagePinToStoredAttack(vb, side, pDisplay);
+      const p =
+        drag.kind === "abilityRotate"
+          ? stratStagePinToStoredAttack(
+              vb,
+              side,
+              clampPointToViewBox(vb, raw),
+            )
+          : stratStagePinToStoredAttack(
+              vb,
+              side,
+              clampPointToViewBox(vb, {
+                x: raw.x - drag.grabDx,
+                y: raw.y - drag.grabDy,
+              }),
+            );
       if (drag.kind === "agent") {
         setAgents(
           activeStageIndex,
@@ -345,12 +378,29 @@ export function StratStageEditor({
             a.id === drag.id ? { ...a, x: p.x, y: p.y } : a,
           ),
         );
-      } else {
+      } else if (drag.kind === "ability") {
         setAbilities(
           activeStageIndex,
           activeStage.abilities.map((a) =>
             a.id === drag.id ? { ...a, x: p.x, y: p.y } : a,
           ),
+        );
+      } else if (drag.kind === "abilityOrigin") {
+        setAbilities(
+          activeStageIndex,
+          activeStage.abilities.map((a) =>
+            a.id === drag.id ? { ...a, x: p.x, y: p.y } : a,
+          ),
+        );
+      } else if (drag.kind === "abilityRotate") {
+        setAbilities(
+          activeStageIndex,
+          activeStage.abilities.map((a) => {
+            if (a.id !== drag.id) return a;
+            const rotationDeg =
+              (Math.atan2(p.y - a.y, p.x - a.x) * 180) / Math.PI;
+            return { ...a, rotationDeg };
+          }),
         );
       }
     };
@@ -560,6 +610,140 @@ export function StratStageEditor({
         const sel = selectedId === ab.id;
         const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });
         const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
+        const useTwoHandles =
+          bp != null && effectiveStratPlacementMode(bp) === "origin_direction";
+        const rotDist = stratAbilityRotationHandleDistance(vbWidth);
+        const rotStored = stratAbilityRotationHandleStored(
+          { x: ab.x, y: ab.y },
+          ab.rotationDeg ?? 0,
+          rotDist,
+        );
+        const rotPos = stratStagePinForDisplay(vb, side, rotStored);
+
+        const abilitySvg = bp ? (
+          <StratAbilityBlueprintSvg
+            blueprint={bp}
+            mapX={pos.x}
+            mapY={pos.y}
+            vbWidth={vbWidth}
+            rotationDeg={ab.rotationDeg ?? 0}
+            selected={sel}
+            abilityDisplayIconUrl={
+              bp.shapeKind === "point"
+                ? abilityMetaForSlot(
+                    valorantAbilityUi,
+                    ab.agentSlug,
+                    ab.slot,
+                  )?.displayIcon ?? null
+                : null
+            }
+            pointerEvents="auto"
+          />
+        ) : (
+          <g transform={`translate(${pos.x},${pos.y})`}>
+            <circle
+              r={abilityR}
+              fill={st.fill}
+              stroke={sel ? "#fae8ff" : st.stroke}
+              strokeWidth={vbWidth * 0.0024 * (sel ? 2.2 : 1)}
+            />
+            <text
+              y={fontAbility * 0.35}
+              textAnchor="middle"
+              fill="rgba(15,23,42,0.92)"
+              style={{
+                fontSize: fontAbility,
+                fontFamily: "system-ui, sans-serif",
+                fontWeight: 800,
+                pointerEvents: "none",
+              }}
+            >
+              {abilitySlotLabel(ab.slot)}
+            </text>
+          </g>
+        );
+
+        if (useTwoHandles) {
+          return (
+            <g key={ab.id}>
+              <g
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (placementMode) return;
+                  setSelectedId(ab.id);
+                  focusMapSvg();
+                }}
+                style={{
+                  cursor: placementMode ? "default" : "pointer",
+                }}
+              >
+                {abilitySvg}
+              </g>
+              <line
+                x1={pos.x}
+                y1={pos.y}
+                x2={rotPos.x}
+                y2={rotPos.y}
+                stroke="rgba(34, 211, 238, 0.7)"
+                strokeWidth={Math.max(vbWidth * 0.0018, 0.85)}
+                strokeDasharray="6 5"
+                pointerEvents="none"
+              />
+              <circle
+                cx={pos.x}
+                cy={pos.y}
+                r={Math.max(vbWidth * 0.01, 5)}
+                fill="rgb(250, 204, 21)"
+                stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                strokeWidth={Math.max(vbWidth * 0.0024, 1) * (sel ? 2.2 : 1)}
+                style={{
+                  cursor: placementMode ? "default" : "grab",
+                  touchAction: "none",
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (placementMode) return;
+                  setSelectedId(ab.id);
+                  focusMapSvg();
+                  const svg = svgRef.current;
+                  if (!svg) return;
+                  const o = svgPointerToLogical(svg, e.clientX, e.clientY);
+                  setDrag({
+                    kind: "abilityOrigin",
+                    id: ab.id,
+                    grabDx: o.x - pos.x,
+                    grabDy: o.y - pos.y,
+                    pointerId: e.pointerId,
+                  });
+                }}
+              />
+              <circle
+                cx={rotPos.x}
+                cy={rotPos.y}
+                r={Math.max(vbWidth * 0.009, 4.5)}
+                fill="rgb(34, 211, 238)"
+                stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                strokeWidth={Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1)}
+                style={{
+                  cursor: placementMode ? "default" : "grab",
+                  touchAction: "none",
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (placementMode) return;
+                  setSelectedId(ab.id);
+                  focusMapSvg();
+                  setDrag({
+                    kind: "abilityRotate",
+                    id: ab.id,
+                    pointerId: e.pointerId,
+                  });
+                }}
+              />
+            </g>
+          );
+        }
+
         return (
           <g
             key={ab.id}
@@ -582,47 +766,7 @@ export function StratStageEditor({
             }}
             style={{ cursor: placementMode ? "default" : "grab" }}
           >
-            {bp ? (
-              <StratAbilityBlueprintSvg
-                blueprint={bp}
-                mapX={pos.x}
-                mapY={pos.y}
-                vbWidth={vbWidth}
-                rotationDeg={ab.rotationDeg ?? 0}
-                selected={sel}
-                abilityDisplayIconUrl={
-                  bp.shapeKind === "point"
-                    ? abilityMetaForSlot(
-                        valorantAbilityUi,
-                        ab.agentSlug,
-                        ab.slot,
-                      )?.displayIcon ?? null
-                    : null
-                }
-              />
-            ) : (
-              <g transform={`translate(${pos.x},${pos.y})`}>
-                <circle
-                  r={abilityR}
-                  fill={st.fill}
-                  stroke={sel ? "#fae8ff" : st.stroke}
-                  strokeWidth={vbWidth * 0.0024 * (sel ? 2.2 : 1)}
-                />
-                <text
-                  y={fontAbility * 0.35}
-                  textAnchor="middle"
-                  fill="rgba(15,23,42,0.92)"
-                  style={{
-                    fontSize: fontAbility,
-                    fontFamily: "system-ui, sans-serif",
-                    fontWeight: 800,
-                    pointerEvents: "none",
-                  }}
-                >
-                  {abilitySlotLabel(ab.slot)}
-                </text>
-              </g>
-            )}
+            {abilitySvg}
           </g>
         );
       })}

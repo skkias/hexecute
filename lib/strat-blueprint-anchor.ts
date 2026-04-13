@@ -36,6 +36,8 @@ export function defaultStratPlacementForShape(
     case "polyline":
     case "polygon":
     case "movement":
+    case "cone":
+    case "ray":
       return "origin_direction";
     default:
       return "center";
