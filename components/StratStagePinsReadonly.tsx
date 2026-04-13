@@ -5,12 +5,13 @@ import type { Agent } from "@/types/catalog";
 import type { StratSide, StratStage } from "@/types/strat";
 import type { ViewBoxRect } from "@/lib/map-path";
 import { stratStagePinForDisplay } from "@/lib/strat-stage-coords";
-import { StratAgentMapPinSvg } from "@/components/StratAgentMapPinSvg";
 import {
-  abbrevAgentName,
+  StratStageAgentTokens,
+  type StratAgentTokenTransition,
+} from "@/components/StratStageAgentTokens";
+import {
   abilitySlotLabel,
   abilitySlotStyle,
-  roleAccent,
 } from "@/lib/strat-stage-pin-styles";
 import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
 import { StratAbilityBlueprintSvg } from "@/components/StratAbilityBlueprintSvg";
@@ -37,6 +38,7 @@ export function StratStagePinsReadonly({
   stage,
   compSlugs,
   agentsCatalog,
+  agentTransition,
 }: {
   vb: ViewBoxRect;
   vbWidth: number;
@@ -44,6 +46,8 @@ export function StratStagePinsReadonly({
   stage: StratStage;
   compSlugs: string[];
   agentsCatalog: Agent[];
+  /** When the viewed stage tab changes, animate agent tokens from the previous stage. */
+  agentTransition?: StratAgentTokenTransition;
 }) {
   const roster = useMemo(() => {
     const slugs = compSlugs.map((s) => s.trim()).filter(Boolean);
@@ -71,9 +75,7 @@ export function StratStagePinsReadonly({
       );
   }, [compSlugs, agentsCatalog]);
 
-  const tokenR = vbWidth * 0.018;
   const abilityR = vbWidth * 0.012;
-  const fontAgent = Math.max(10, vbWidth * 0.016);
   const fontAbility = Math.max(9, vbWidth * 0.013);
 
   const [valorantAbilityUi, setValorantAbilityUi] = useState<
@@ -96,31 +98,6 @@ export function StratStagePinsReadonly({
 
   return (
     <g style={{ pointerEvents: "none" }}>
-      {stage.agents.map((a) => {
-        const meta = roster.find((r) => r.slug === a.agentSlug);
-        const accent = meta
-          ? roleAccent(meta.role)
-          : { fill: "#94a3b8", stroke: "#fff" };
-        const abbr = meta
-          ? abbrevAgentName(meta.name)
-          : a.agentSlug.slice(0, 2).toUpperCase();
-        const pos = stratStagePinForDisplay(vb, side, { x: a.x, y: a.y });
-        return (
-          <g key={a.id} transform={`translate(${pos.x},${pos.y})`}>
-            <StratAgentMapPinSvg
-              tokenR={tokenR}
-              vbWidth={vbWidth}
-              abbr={abbr}
-              fontAgent={fontAgent}
-              accent={accent}
-              portraitUrl={meta?.portraitUrl}
-              selected={false}
-              pinId={a.id}
-              pointerEventsNoneOnText
-            />
-          </g>
-        );
-      })}
       {stage.abilities.map((ab) => {
         const st = abilitySlotStyle(ab.slot);
         const pos = stratStagePinForDisplay(vb, side, { x: ab.x, y: ab.y });
@@ -228,6 +205,15 @@ export function StratStagePinsReadonly({
           </g>
         );
       })}
+      <StratStageAgentTokens
+        vb={vb}
+        vbWidth={vbWidth}
+        side={side}
+        agents={stage.agents}
+        roster={roster}
+        transition={agentTransition ?? null}
+        pointerEventsNoneOnText
+      />
     </g>
   );
 }

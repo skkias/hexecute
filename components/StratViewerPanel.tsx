@@ -5,6 +5,7 @@ import type { Agent, GameMap } from "@/types/catalog";
 import type { StratSide, StratStage } from "@/types/strat";
 import { StratMapViewer } from "@/components/StratMapViewer";
 import { StratStagePinsReadonly } from "@/components/StratStagePinsReadonly";
+import type { StratAgentTokenTransition } from "@/components/StratStageAgentTokens";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
 
 /**
@@ -17,6 +18,7 @@ export function StratViewerPanel({
   stage,
   compSlugs,
   agentsCatalog,
+  agentTransition,
   embed = false,
   showFooter = true,
 }: {
@@ -25,6 +27,7 @@ export function StratViewerPanel({
   stage: StratStage;
   compSlugs: string[];
   agentsCatalog: Agent[];
+  agentTransition?: StratAgentTokenTransition;
   /** Fill a flex column (e.g. modal map pane). */
   embed?: boolean;
   showFooter?: boolean;
@@ -50,6 +53,7 @@ export function StratViewerPanel({
         stage={stage}
         compSlugs={compSlugs}
         agentsCatalog={agentsCatalog}
+        agentTransition={agentTransition}
       />
     </StratMapViewer>
   );

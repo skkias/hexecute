@@ -1,9 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Image from "next/image";
 import type { Agent, GameMap } from "@/types/catalog";
 import type { Strat } from "@/types/strat";
+import type { StratAgentTokenTransition } from "@/components/StratStageAgentTokens";
 import { StratViewerPanel } from "@/components/StratViewerPanel";
 import { resolveGameMapForStrat } from "@/lib/resolve-game-map";
 import {
@@ -30,6 +38,10 @@ export function StratModal({
   const images = strat?.images?.filter((i) => i.url) ?? [];
   const [imageIndex, setImageIndex] = useState(0);
   const [stageIndex, setStageIndex] = useState(0);
+  const [agentStageTransition, setAgentStageTransition] =
+    useState<StratAgentTokenTransition | null>(null);
+  const lastStageIdxRef = useRef(0);
+  const prevStratIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!strat) return;
@@ -55,6 +67,34 @@ export function StratModal({
   const maxStage = Math.max(0, stages.length - 1);
   const safeStageIndex = Math.min(stageIndex, maxStage);
   const activeStage = stages[safeStageIndex] ?? stages[0];
+
+  useLayoutEffect(() => {
+    if (!strat) return;
+    if (prevStratIdRef.current !== strat.id) {
+      prevStratIdRef.current = strat.id;
+      lastStageIdxRef.current = 0;
+      setAgentStageTransition(null);
+      return;
+    }
+    if (lastStageIdxRef.current === safeStageIndex) return;
+    const fromIdx = lastStageIdxRef.current;
+    lastStageIdxRef.current = safeStageIndex;
+    const leaving = stages[fromIdx];
+    if (!leaving || leaving.transition === "none") {
+      setAgentStageTransition(null);
+      return;
+    }
+    setAgentStageTransition({
+      fromStage: stages[fromIdx],
+      kind: leaving.transition,
+      ms: leaving.transitionMs,
+    });
+    const tid = window.setTimeout(
+      () => setAgentStageTransition(null),
+      leaving.transitionMs + 80,
+    );
+    return () => window.clearTimeout(tid);
+  }, [strat, safeStageIndex, stages]);
 
   const goImage = useCallback(
     (dir: -1 | 1) => {
@@ -291,6 +331,7 @@ export function StratModal({
                   stage={activeStage}
                   compSlugs={compSlugs}
                   agentsCatalog={agentsCatalog}
+                  agentTransition={agentStageTransition}
                   embed
                 />
               </div>

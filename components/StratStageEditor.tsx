@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
 import type { Agent, GameMap } from "@/types/catalog";
@@ -26,12 +33,13 @@ import {
   fetchValorantAbilityUiBySlug,
   type ValorantAbilityUiMeta,
 } from "@/lib/valorant-api-abilities";
-import { StratAgentMapPinSvg } from "@/components/StratAgentMapPinSvg";
 import {
-  abbrevAgentName,
+  StratStageAgentTokens,
+  type StratAgentTokenTransition,
+} from "@/components/StratStageAgentTokens";
+import {
   abilitySlotLabel,
   abilitySlotStyle,
-  roleAccent,
 } from "@/lib/strat-stage-pin-styles";
 import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
 import { StratAbilityBlueprintSvg } from "@/components/StratAbilityBlueprintSvg";
@@ -102,20 +110,6 @@ function newItemId(): string {
   return `pin-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function transitionAnimationName(t: StratStageTransition): string | null {
-  switch (t) {
-    case "fade":
-      return "strat-stage-fade";
-    case "slide-left":
-      return "strat-stage-slide-from-left";
-    case "slide-right":
-      return "strat-stage-slide-from-right";
-    case "none":
-    default:
-      return null;
-  }
-}
-
 const TRANSITION_OPTIONS: { value: StratStageTransition; label: string }[] = [
   { value: "none", label: "None" },
   { value: "fade", label: "Fade" },
@@ -154,10 +148,8 @@ export function StratStageEditor({
   );
   const [drag, setDrag] = useState<DragState>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [mapAnim, setMapAnim] = useState<{
-    name: string;
-    ms: number;
-  } | null>(null);
+  const [agentStageTrans, setAgentStageTrans] =
+    useState<StratAgentTokenTransition | null>(null);
   /** Left column: stage fields vs token placement controls. */
   const [editorTab, setEditorTab] = useState<"stage" | "tokens">("stage");
   /** Valorant API ability names/descriptions keyed by agent slug. */
@@ -287,7 +279,7 @@ export function StratStageEditor({
 
   const prevIndexRef = useRef(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!didMountRef.current) {
       didMountRef.current = true;
       prevIndexRef.current = activeStageIndex;
@@ -296,18 +288,22 @@ export function StratStageEditor({
     const prev = prevIndexRef.current;
     prevIndexRef.current = activeStageIndex;
     if (prev === activeStageIndex) return;
-    const left = stages[prev];
-    const t = left?.transition ?? "fade";
-    const ms = left?.transitionMs ?? 450;
-    const name = transitionAnimationName(t);
-    if (!name) {
-      setMapAnim(null);
+    const leaving = stages[prev];
+    if (!leaving || leaving.transition === "none") {
+      setAgentStageTrans(null);
       return;
     }
-    setMapAnim({ name, ms });
-    const tid = window.setTimeout(() => setMapAnim(null), ms + 40);
+    setAgentStageTrans({
+      fromStage: stages[prev],
+      kind: leaving.transition,
+      ms: leaving.transitionMs,
+    });
+    const tid = window.setTimeout(
+      () => setAgentStageTrans(null),
+      leaving.transitionMs + 80,
+    );
     return () => window.clearTimeout(tid);
-  }, [activeStageIndex]);
+  }, [activeStageIndex, stages]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -439,6 +435,12 @@ export function StratStageEditor({
     const pDisplay = clampPointToViewBox(vb, raw);
     const p = stratStagePinToStoredAttack(vb, side, pDisplay);
     if (placementMode.kind === "agent") {
+      if (
+        activeStage.agents.some((x) => x.agentSlug === placementMode.slug)
+      ) {
+        setPlacementMode(null);
+        return;
+      }
       const next: StratPlacedAgent = {
         id: newItemId(),
         agentSlug: placementMode.slug,
@@ -502,9 +504,7 @@ export function StratStageEditor({
     setSelectedId(null);
   }
 
-  const tokenR = vbWidth * 0.018;
   const abilityR = vbWidth * 0.012;
-  const fontAgent = Math.max(10, vbWidth * 0.016);
   const fontAbility = Math.max(9, vbWidth * 0.013);
 
   const overlay = activeStage ? (
@@ -566,50 +566,6 @@ export function StratStageEditor({
           pointerEvents="none"
         />
       ) : null}
-      {activeStage.agents.map((a) => {
-        const meta = roster.find((r) => r.slug === a.agentSlug);
-        const accent = meta
-          ? roleAccent(meta.role)
-          : { fill: "#94a3b8", stroke: "#fff" };
-        const abbr = meta ? abbrevAgentName(meta.name) : a.agentSlug.slice(0, 2).toUpperCase();
-        const sel = selectedId === a.id;
-        const pos = stratStagePinForDisplay(vb, side, { x: a.x, y: a.y });
-        return (
-          <g
-            key={a.id}
-            transform={`translate(${pos.x},${pos.y})`}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              if (placementMode) return;
-              setSelectedId(a.id);
-              focusMapSvg();
-              const svg = svgRef.current;
-              if (svg) {
-                const o = svgPointerToLogical(svg, e.clientX, e.clientY);
-                setDrag({
-                  kind: "agent",
-                  id: a.id,
-                  grabDx: o.x - pos.x,
-                  grabDy: o.y - pos.y,
-                  pointerId: e.pointerId,
-                });
-              }
-            }}
-            style={{ cursor: placementMode ? "default" : "grab" }}
-          >
-            <StratAgentMapPinSvg
-              tokenR={tokenR}
-              vbWidth={vbWidth}
-              abbr={abbr}
-              fontAgent={fontAgent}
-              accent={accent}
-              portraitUrl={meta?.portraitUrl}
-              selected={sel}
-              pinId={a.id}
-            />
-          </g>
-        );
-      })}
       {activeStage.abilities.map((ab) => {
         const st = abilitySlotStyle(ab.slot);
         const sel = selectedId === ab.id;
@@ -795,6 +751,35 @@ export function StratStageEditor({
           </g>
         );
       })}
+      <StratStageAgentTokens
+        vb={vb}
+        vbWidth={vbWidth}
+        side={side}
+        agents={activeStage.agents}
+        roster={roster}
+        transition={agentStageTrans}
+        interactive={{
+          placementModeBlocks: placementMode != null,
+          selectedId,
+          onPointerDown: (a, pos, e) => {
+            e.stopPropagation();
+            if (placementMode) return;
+            setSelectedId(a.id);
+            focusMapSvg();
+            const svg = svgRef.current;
+            if (svg) {
+              const o = svgPointerToLogical(svg, e.clientX, e.clientY);
+              setDrag({
+                kind: "agent",
+                id: a.id,
+                grabDx: o.x - pos.x,
+                grabDy: o.y - pos.y,
+                pointerId: e.pointerId,
+              });
+            }
+          },
+        }}
+      />
     </g>
   ) : null;
 
@@ -1062,7 +1047,11 @@ export function StratStageEditor({
                 </p>
               ) : (
                 <div className="mt-3 flex flex-wrap gap-3">
-                  {roster.map((r) => (
+                  {roster.map((r) => {
+                    const agentPlacedOnStage =
+                      activeStage?.agents.some((x) => x.agentSlug === r.slug) ??
+                      false;
+                    return (
                     <div
                       key={r.slug}
                       className="flex max-w-full flex-col gap-1 rounded-lg border border-violet-800/30 bg-slate-950/30 px-2 py-2"
@@ -1070,6 +1059,12 @@ export function StratStageEditor({
                       <div className="flex flex-wrap items-center gap-1">
                         <button
                           type="button"
+                          disabled={agentPlacedOnStage}
+                          title={
+                            agentPlacedOnStage
+                              ? "This agent is already on this stage"
+                              : undefined
+                          }
                           onClick={() =>
                             setPlacementMode((m) =>
                               m?.kind === "agent" && m.slug === r.slug
@@ -1082,7 +1077,7 @@ export function StratStageEditor({
                             placementMode.slug === r.slug
                               ? "border-violet-400 bg-violet-950/60 text-white"
                               : "border-violet-800/45 bg-slate-950/60 text-violet-200"
-                          }`}
+                          } disabled:cursor-not-allowed disabled:opacity-45`}
                         >
                           {r.name}
                         </button>
@@ -1132,7 +1127,8 @@ export function StratStageEditor({
                         })}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1143,14 +1139,7 @@ export function StratStageEditor({
 
   const mapPanel =
     activeStage ? (
-      <div
-        className="flex min-h-0 min-h-[min(56dvh,720px)] w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:flex-1"
-        style={{
-          animation: mapAnim
-            ? `${mapAnim.name} ${mapAnim.ms}ms ease both`
-            : undefined,
-        }}
-      >
+      <div className="flex min-h-0 min-h-[min(56dvh,720px)] w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:flex-1">
         <StratMapViewer
           ref={svgRef}
           gameMap={gameMap}

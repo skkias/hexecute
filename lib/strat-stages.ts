@@ -99,9 +99,16 @@ function normalizeStage(raw: unknown, index: number): StratStage {
   const notes = typeof o.notes === "string" ? o.notes : "";
   const agentsIn = Array.isArray(o.agents) ? o.agents : [];
   const abilitiesIn = Array.isArray(o.abilities) ? o.abilities : [];
-  const agents = agentsIn
+  const agentsRaw = agentsIn
     .map(normalizeAgent)
     .filter((x): x is StratPlacedAgent => x != null);
+  const seenSlugs = new Set<string>();
+  const agents: StratPlacedAgent[] = [];
+  for (const a of agentsRaw) {
+    if (seenSlugs.has(a.agentSlug)) continue;
+    seenSlugs.add(a.agentSlug);
+    agents.push(a);
+  }
   const abilities = abilitiesIn
     .map(normalizeAbility)
     .filter((x): x is StratPlacedAbility => x != null);
