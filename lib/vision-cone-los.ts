@@ -111,13 +111,53 @@ export function isVisionOriginInPlayable(
   return true;
 }
 
+/**
+ * Large enough cast distance so rays reach the far side of the map; actual
+ * length is always clamped by {@link nearestRayHitDistance}.
+ */
+export function visionLosMaxCastRange(
+  origin: MapPoint,
+  context: VisionLosContext,
+): number {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const expand = (pts: MapPoint[]) => {
+    for (const p of pts) {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+  };
+  expand(context.outer);
+  for (const h of context.holes) expand(h);
+  for (const poly of context.blockerPolygons) expand(poly);
+  if (!Number.isFinite(minX)) return 1e9;
+  const corners: MapPoint[] = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ];
+  let maxCornerDist = 0;
+  for (const c of corners) {
+    maxCornerDist = Math.max(
+      maxCornerDist,
+      Math.hypot(c.x - origin.x, c.y - origin.y),
+    );
+  }
+  return Math.max(maxCornerDist * 2.5, 1);
+}
+
 export function computeVisionConeRayEnd(args: {
   origin: MapPoint;
   angleRad: number;
-  range: number;
   context: VisionLosContext;
 }): MapPoint {
-  const { origin, angleRad, range, context } = args;
+  const { origin, angleRad, context } = args;
+  const range = visionLosMaxCastRange(origin, context);
   const hit = nearestRayHitDistance(origin, angleRad, range, context);
   return {
     x: origin.x + Math.cos(angleRad) * hit,
@@ -141,7 +181,7 @@ export function computeVisionConeLosPolygon(args: {
   const leftAng = Math.atan2(lvy, lvx);
   const rightAng = Math.atan2(rvy, rvx);
   const sweep = normalizeSignedRad(rightAng - leftAng);
-  const range = Math.max(Math.hypot(lvx, lvy), Math.hypot(rvx, rvy), 1);
+  const range = visionLosMaxCastRange(origin, context);
   const rayCount = Math.max(18, Math.min(120, Math.round(Math.abs(sweep) * 36)));
 
   const pts: MapPoint[] = [origin];

@@ -757,7 +757,6 @@ export function StratStageEditor({
             ? computeVisionConeRayEnd({
                 origin: pos,
                 angleRad: (cone.rotationDeg * Math.PI) / 180,
-                range: coneMidRange,
                 context: visionLosContext,
               })
             : {
@@ -792,28 +791,19 @@ export function StratStageEditor({
                 });
               }}
             />
-            <line
-              x1={pos.x}
-              y1={pos.y}
-              x2={rayEnd.x}
-              y2={rayEnd.y}
-              stroke={VISION_CONE_TOKEN_COLOR}
-              opacity={0.82}
-              strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
-              strokeDasharray="6 5"
-              pointerEvents="none"
-            />
-            <circle
-              cx={pos.x}
-              cy={pos.y}
-              r={Math.max(vbWidth * 0.0095, 4.5) * pinS}
-              fill={VISION_CONE_TOKEN_COLOR}
-              stroke={sel ? "#faf5ff" : "#0f172a"}
-              strokeWidth={Math.max(vbWidth * 0.0018, 0.9) * pinS}
-              pointerEvents="none"
-            />
             {sel ? (
               <>
+                <line
+                  x1={pos.x}
+                  y1={pos.y}
+                  x2={rayEnd.x}
+                  y2={rayEnd.y}
+                  stroke={VISION_CONE_TOKEN_COLOR}
+                  opacity={0.82}
+                  strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
+                  strokeDasharray="6 5"
+                  pointerEvents="none"
+                />
                 <circle
                   cx={pos.x}
                   cy={pos.y}

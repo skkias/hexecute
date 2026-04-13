@@ -27,7 +27,6 @@ import {
 import {
   buildVisionLosContext,
   computeVisionConeLosPolygon,
-  computeVisionConeRayEnd,
   isVisionOriginInPlayable,
 } from "@/lib/vision-cone-los";
 
@@ -154,46 +153,12 @@ export function StratStagePinsReadonly({
                 context: visionLosContext,
               })
             : [pos, { x: sh.lx, y: sh.ly }, { x: sh.rx, y: sh.ry }];
-        const rayEnd =
-          visionLosContext && inPlayable
-            ? computeVisionConeRayEnd({
-                origin: pos,
-                angleRad: (cone.rotationDeg * Math.PI) / 180,
-                range: sh.len,
-                context: visionLosContext,
-              })
-            : {
-                x:
-                  pos.x +
-                  Math.cos((cone.rotationDeg * Math.PI) / 180) * sh.len,
-                y:
-                  pos.y +
-                  Math.sin((cone.rotationDeg * Math.PI) / 180) * sh.len,
-              };
         return (
           <g key={cone.id}>
             <polygon
               points={losPoly.map((p) => `${p.x},${p.y}`).join(" ")}
               fill="rgba(244,114,182,0.2)"
               stroke="none"
-            />
-            <line
-              x1={pos.x}
-              y1={pos.y}
-              x2={rayEnd.x}
-              y2={rayEnd.y}
-              stroke="rgb(244,114,182)"
-              opacity={0.82}
-              strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
-              strokeDasharray="6 5"
-            />
-            <circle
-              cx={pos.x}
-              cy={pos.y}
-              r={Math.max(vbWidth * 0.0095, 4.5) * pinS}
-              fill="rgb(244,114,182)"
-              stroke="#0f172a"
-              strokeWidth={Math.max(vbWidth * 0.0018, 0.9) * pinS}
             />
           </g>
         );
