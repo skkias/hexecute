@@ -71,7 +71,12 @@ import {
   rectangleStratPivotBlueprint,
   stratAnchorOverrideForBlueprint,
 } from "@/lib/strat-blueprint-map-point";
-import { buildVisionLosContext } from "@/lib/vision-cone-los";
+import {
+  buildVisionLosContext,
+  computeVisionConeLosPolygon,
+  computeVisionConeRayEnd,
+  isVisionOriginInPlayable,
+} from "@/lib/vision-cone-los";
 
 type PlacementMode =
   | null
@@ -735,14 +740,40 @@ export function StratStageEditor({
           cone.rotationDeg,
           pinS,
         );
+        const inPlayable =
+          visionLosContext != null && isVisionOriginInPlayable(pos, visionLosContext);
+        const losPoly =
+          visionLosContext && inPlayable
+            ? computeVisionConeLosPolygon({
+                origin: pos,
+                left: { x: sh.lx, y: sh.ly },
+                right: { x: sh.rx, y: sh.ry },
+                context: visionLosContext,
+              })
+            : [pos, { x: sh.lx, y: sh.ly }, { x: sh.rx, y: sh.ry }];
+        const coneMidRange = Math.hypot(sh.hx - pos.x, sh.hy - pos.y) / 0.78;
+        const rayEnd =
+          visionLosContext && inPlayable
+            ? computeVisionConeRayEnd({
+                origin: pos,
+                angleRad: (cone.rotationDeg * Math.PI) / 180,
+                range: coneMidRange,
+                context: visionLosContext,
+              })
+            : {
+                x:
+                  pos.x +
+                  Math.cos((cone.rotationDeg * Math.PI) / 180) * coneMidRange,
+                y:
+                  pos.y +
+                  Math.sin((cone.rotationDeg * Math.PI) / 180) * coneMidRange,
+              };
         return (
           <g key={cone.id}>
             <polygon
-              points={`${pos.x},${pos.y} ${sh.lx},${sh.ly} ${sh.rx},${sh.ry}`}
+              points={losPoly.map((p) => `${p.x},${p.y}`).join(" ")}
               fill="rgba(244,114,182,0.2)"
-              stroke={VISION_CONE_TOKEN_COLOR}
-              strokeWidth={Math.max(vbWidth * 0.0018, 0.8) * (sel ? 1.6 : 1)}
-              strokeLinejoin="round"
+              stroke="none"
               style={{ cursor: placementMode ? "default" : "grab" }}
               onPointerDown={(e) => {
                 e.stopPropagation();
@@ -761,19 +792,28 @@ export function StratStageEditor({
                 });
               }}
             />
+            <line
+              x1={pos.x}
+              y1={pos.y}
+              x2={rayEnd.x}
+              y2={rayEnd.y}
+              stroke={VISION_CONE_TOKEN_COLOR}
+              opacity={0.82}
+              strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
+              strokeDasharray="6 5"
+              pointerEvents="none"
+            />
+            <circle
+              cx={pos.x}
+              cy={pos.y}
+              r={Math.max(vbWidth * 0.0095, 4.5) * pinS}
+              fill={VISION_CONE_TOKEN_COLOR}
+              stroke={sel ? "#faf5ff" : "#0f172a"}
+              strokeWidth={Math.max(vbWidth * 0.0018, 0.9) * pinS}
+              pointerEvents="none"
+            />
             {sel ? (
               <>
-                <line
-                  x1={pos.x}
-                  y1={pos.y}
-                  x2={sh.hx}
-                  y2={sh.hy}
-                  stroke={VISION_CONE_TOKEN_COLOR}
-                  opacity={0.75}
-                  strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
-                  strokeDasharray="6 5"
-                  pointerEvents="none"
-                />
                 <circle
                   cx={pos.x}
                   cy={pos.y}
@@ -925,72 +965,76 @@ export function StratStageEditor({
               >
                 {abilitySvg}
               </g>
-              <line
-                x1={pos.x}
-                y1={pos.y}
-                x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
-                y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
-                stroke={accentColor}
-                opacity={0.75}
-                strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
-                strokeDasharray="6 5"
-                pointerEvents="none"
-              />
-              <circle
-                cx={pos.x}
-                cy={pos.y}
-                r={Math.max(vbWidth * 0.01, 5) * pinS}
-                fill={accentColor}
-                stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
-                strokeWidth={
-                  Math.max(vbWidth * 0.0024, 1) * (sel ? 2.2 : 1) * pinS
-                }
-                style={{
-                  cursor: placementMode ? "default" : "grab",
-                  touchAction: "none",
-                }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  if (placementMode) return;
-                  setSelectedId(ab.id);
-                  focusMapSvg();
-                  const svg = svgRef.current;
-                  if (!svg) return;
-                  const o = svgPointerToLogical(svg, e.clientX, e.clientY);
-                  setDrag({
-                    kind: "abilityOrigin",
-                    id: ab.id,
-                    grabDx: o.x - pos.x,
-                    grabDy: o.y - pos.y,
-                    pointerId: e.pointerId,
-                  });
-                }}
-              />
-              <circle
-                cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
-                cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
-                r={Math.max(vbWidth * 0.009, 4.5) * pinS}
-                fill={accentColor}
-                stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
-                strokeWidth={
-                  Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1) * pinS
-                }
-                style={{
-                  cursor: placementMode ? "default" : "grab",
-                  touchAction: "none",
-                }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  if (placementMode) return;
-                  setSelectedId(ab.id);
-                  focusMapSvg();
-                  setDrag({
-                    kind: "abilityRotate",
-                    id: ab.id,
-                    pointerId: e.pointerId,
-                  });
-                }}
-              />
+              {sel ? (
+                <>
+                  <line
+                    x1={pos.x}
+                    y1={pos.y}
+                    x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
+                    y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
+                    stroke={accentColor}
+                    opacity={0.75}
+                    strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
+                    strokeDasharray="6 5"
+                    pointerEvents="none"
+                  />
+                  <circle
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={Math.max(vbWidth * 0.01, 5) * pinS}
+                    fill={accentColor}
+                    stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                    strokeWidth={
+                      Math.max(vbWidth * 0.0024, 1) * (sel ? 2.2 : 1) * pinS
+                    }
+                    style={{
+                      cursor: placementMode ? "default" : "grab",
+                      touchAction: "none",
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      if (placementMode) return;
+                      setSelectedId(ab.id);
+                      focusMapSvg();
+                      const svg = svgRef.current;
+                      if (!svg) return;
+                      const o = svgPointerToLogical(svg, e.clientX, e.clientY);
+                      setDrag({
+                        kind: "abilityOrigin",
+                        id: ab.id,
+                        grabDx: o.x - pos.x,
+                        grabDy: o.y - pos.y,
+                        pointerId: e.pointerId,
+                      });
+                    }}
+                  />
+                  <circle
+                    cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
+                    cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
+                    r={Math.max(vbWidth * 0.009, 4.5) * pinS}
+                    fill={accentColor}
+                    stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                    strokeWidth={
+                      Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1) * pinS
+                    }
+                    style={{
+                      cursor: placementMode ? "default" : "grab",
+                      touchAction: "none",
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      if (placementMode) return;
+                      setSelectedId(ab.id);
+                      focusMapSvg();
+                      setDrag({
+                        kind: "abilityRotate",
+                        id: ab.id,
+                        pointerId: e.pointerId,
+                      });
+                    }}
+                  />
+                </>
+              ) : null}
             </g>
           );
         }

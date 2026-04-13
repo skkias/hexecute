@@ -5,12 +5,12 @@ import { parsePathToRings } from "@/lib/map-path";
 import { outlinePathForStratDisplay } from "@/lib/map-strat-side";
 import { stratMapDisplayData } from "@/lib/strat-map-display";
 import { circleToPolygon, isCircleOverlay } from "@/lib/map-overlay-geometry";
-import { pointInPolygon } from "@/lib/polygon-contains";
+import { pointInOutlineWithHoles, pointInPolygon } from "@/lib/polygon-contains";
 
 export type VisionLosContext = {
   outer: MapPoint[];
   holes: MapPoint[][];
-  obstaclePolygons: MapPoint[][];
+  blockerPolygons: MapPoint[][];
 };
 
 type Segment = { a: MapPoint; b: MapPoint };
@@ -66,8 +66,8 @@ export function buildVisionLosContext(
   if (outer.length < 3) return null;
   const holes = rings.slice(1).filter((r) => r.length >= 3);
   const overlays = stratMapDisplayData(gameMap, side).overlays;
-  const obstaclePolygons: MapPoint[][] = overlays
-    .filter((sh) => sh.kind === "obstacle")
+  const blockerPolygons: MapPoint[][] = overlays
+    .filter((sh) => sh.kind === "obstacle" || sh.kind === "wall")
     .map((sh) => {
       if (isCircleOverlay(sh) && sh.circle) {
         return circleToPolygon(sh.circle, 72);
@@ -75,7 +75,54 @@ export function buildVisionLosContext(
       return sh.points;
     })
     .filter((pts) => pts.length >= 3);
-  return { outer, holes, obstaclePolygons };
+  return { outer, holes, blockerPolygons };
+}
+
+function nearestRayHitDistance(
+  origin: MapPoint,
+  angleRad: number,
+  maxRange: number,
+  context: VisionLosContext,
+): number {
+  const dx = Math.cos(angleRad);
+  const dy = Math.sin(angleRad);
+  const boundarySegments: Segment[] = [
+    ...ringSegments(context.outer),
+    ...context.holes.flatMap((h) => ringSegments(h)),
+    ...context.blockerPolygons.flatMap((p) => ringSegments(p)),
+  ];
+  let nearest = maxRange;
+  for (const seg of boundarySegments) {
+    const hit = raySegmentHitDistance(origin, dx, dy, seg);
+    if (hit == null) continue;
+    if (hit < nearest) nearest = hit;
+  }
+  return nearest;
+}
+
+export function isVisionOriginInPlayable(
+  origin: MapPoint,
+  context: VisionLosContext,
+): boolean {
+  if (!pointInOutlineWithHoles(origin, context.outer, context.holes)) return false;
+  for (const poly of context.blockerPolygons) {
+    if (pointInPolygon(origin, poly)) return false;
+  }
+  return true;
+}
+
+export function computeVisionConeRayEnd(args: {
+  origin: MapPoint;
+  angleRad: number;
+  range: number;
+  context: VisionLosContext;
+}): MapPoint {
+  const { origin, angleRad, range, context } = args;
+  const hit = nearestRayHitDistance(origin, angleRad, range, context);
+  return {
+    x: origin.x + Math.cos(angleRad) * hit,
+    y: origin.y + Math.sin(angleRad) * hit,
+  };
 }
 
 export function computeVisionConeLosPolygon(args: {
@@ -85,15 +132,7 @@ export function computeVisionConeLosPolygon(args: {
   context: VisionLosContext;
 }): MapPoint[] {
   const { origin, left, right, context } = args;
-  for (const poly of context.obstaclePolygons) {
-    if (pointInPolygon(origin, poly)) return [origin];
-  }
-
-  const boundarySegments: Segment[] = [
-    ...ringSegments(context.outer),
-    ...context.holes.flatMap((h) => ringSegments(h)),
-    ...context.obstaclePolygons.flatMap((p) => ringSegments(p)),
-  ];
+  if (!isVisionOriginInPlayable(origin, context)) return [origin];
 
   const lvx = left.x - origin.x;
   const lvy = left.y - origin.y;
@@ -109,17 +148,10 @@ export function computeVisionConeLosPolygon(args: {
   for (let i = 0; i <= rayCount; i++) {
     const t = i / rayCount;
     const a = leftAng + sweep * t;
-    const dx = Math.cos(a);
-    const dy = Math.sin(a);
-    let nearest = range;
-    for (const seg of boundarySegments) {
-      const hit = raySegmentHitDistance(origin, dx, dy, seg);
-      if (hit == null) continue;
-      if (hit < nearest) nearest = hit;
-    }
+    const nearest = nearestRayHitDistance(origin, a, range, context);
     pts.push({
-      x: origin.x + dx * nearest,
-      y: origin.y + dy * nearest,
+      x: origin.x + Math.cos(a) * nearest,
+      y: origin.y + Math.sin(a) * nearest,
     });
   }
   return pts;

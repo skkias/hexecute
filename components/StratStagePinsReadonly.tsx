@@ -24,7 +24,12 @@ import {
   clampCoachMapPinScale,
   stratAbilityPinDimensions,
 } from "@/lib/strat-map-pin-scale";
-import { buildVisionLosContext } from "@/lib/vision-cone-los";
+import {
+  buildVisionLosContext,
+  computeVisionConeLosPolygon,
+  computeVisionConeRayEnd,
+  isVisionOriginInPlayable,
+} from "@/lib/vision-cone-los";
 
 function visionConeDisplayShape(
   origin: { x: number; y: number },
@@ -43,6 +48,7 @@ function visionConeDisplayShape(
     ly: origin.y + Math.sin(left) * len,
     rx: origin.x + Math.cos(right) * len,
     ry: origin.y + Math.sin(right) * len,
+    len,
   };
 }
 
@@ -137,15 +143,59 @@ export function StratStagePinsReadonly({
           cone.rotationDeg,
           pinS,
         );
+        const inPlayable =
+          visionLosContext != null && isVisionOriginInPlayable(pos, visionLosContext);
+        const losPoly =
+          visionLosContext && inPlayable
+            ? computeVisionConeLosPolygon({
+                origin: pos,
+                left: { x: sh.lx, y: sh.ly },
+                right: { x: sh.rx, y: sh.ry },
+                context: visionLosContext,
+              })
+            : [pos, { x: sh.lx, y: sh.ly }, { x: sh.rx, y: sh.ry }];
+        const rayEnd =
+          visionLosContext && inPlayable
+            ? computeVisionConeRayEnd({
+                origin: pos,
+                angleRad: (cone.rotationDeg * Math.PI) / 180,
+                range: sh.len,
+                context: visionLosContext,
+              })
+            : {
+                x:
+                  pos.x +
+                  Math.cos((cone.rotationDeg * Math.PI) / 180) * sh.len,
+                y:
+                  pos.y +
+                  Math.sin((cone.rotationDeg * Math.PI) / 180) * sh.len,
+              };
         return (
-          <polygon
-            key={cone.id}
-            points={`${pos.x},${pos.y} ${sh.lx},${sh.ly} ${sh.rx},${sh.ry}`}
-            fill="rgba(244,114,182,0.2)"
-            stroke="rgb(244,114,182)"
-            strokeWidth={Math.max(vbWidth * 0.0018, 0.8)}
-            strokeLinejoin="round"
-          />
+          <g key={cone.id}>
+            <polygon
+              points={losPoly.map((p) => `${p.x},${p.y}`).join(" ")}
+              fill="rgba(244,114,182,0.2)"
+              stroke="none"
+            />
+            <line
+              x1={pos.x}
+              y1={pos.y}
+              x2={rayEnd.x}
+              y2={rayEnd.y}
+              stroke="rgb(244,114,182)"
+              opacity={0.82}
+              strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
+              strokeDasharray="6 5"
+            />
+            <circle
+              cx={pos.x}
+              cy={pos.y}
+              r={Math.max(vbWidth * 0.0095, 4.5) * pinS}
+              fill="rgb(244,114,182)"
+              stroke="#0f172a"
+              strokeWidth={Math.max(vbWidth * 0.0018, 0.9) * pinS}
+            />
+          </g>
         );
       })}
       {stage.abilities.map((ab) => {
