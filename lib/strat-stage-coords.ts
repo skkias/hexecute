@@ -7,8 +7,8 @@ import type { StratSide } from "@/types/strat";
 
 /**
  * Stage pins are stored in attack-side viewBox coordinates. Defense view reflects
- * across the horizontal midline (`flipPointsOverHorizontalMidline`), matching
- * `path_def` and `stratMapDisplayData`.
+ * across the horizontal midline (`flipPointsOverHorizontalMidline`) so objects/tokens
+ * follow the same side transform as strat map overlays.
  */
 export function stratStagePinForDisplay(
   vb: ViewBoxRect,

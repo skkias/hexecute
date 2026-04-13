@@ -26,7 +26,7 @@ export function viewBoxRectFromMap(map: GameMap): ViewBoxRect {
 
 /**
  * Map data is stored in attack-side viewBox coordinates. Defense view mirrors across
- * the horizontal midline (same transform used for `path_def` in map editor/save flow).
+ * the horizontal midline (top/bottom swap around the map center).
  */
 export function stratMapDisplayData(
   map: GameMap,

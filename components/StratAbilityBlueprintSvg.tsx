@@ -525,6 +525,9 @@ export function StratAbilityBlueprintSvg({
   ) {
     return inner;
   }
+  if (g.kind === "ricochet" && visionLosContext) {
+    return inner;
+  }
 
   return (
     <g transform={transform}>
