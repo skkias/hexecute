@@ -116,7 +116,7 @@ export function BlueprintShapeHandles({
     };
   }
 
-  const stroke = "#fafafa";
+  const stroke = blueprint.color;
   const fill = blueprint.color;
   const r = vb * HR;
 

@@ -523,6 +523,14 @@ export function StratStageEditor({
     vbWidth,
     mapPinScale,
   );
+  const placementAbilityColor =
+    placementMode?.kind === "ability"
+      ? (agentBlueprintForSlot(
+          agentsCatalog,
+          placementMode.slug,
+          placementMode.slot,
+        )?.color ?? "rgb(34,211,238)")
+      : "rgb(34,211,238)";
 
   const overlay = activeStage ? (
     <g style={{ pointerEvents: "auto" }}>
@@ -577,7 +585,8 @@ export function StratStageEditor({
           }
           x2={abilityDirPreview.x}
           y2={abilityDirPreview.y}
-          stroke="rgba(34,211,238,0.9)"
+          stroke={placementAbilityColor}
+          opacity={0.9}
           strokeWidth={Math.max(vbWidth * 0.0035, 1.5) * pinS}
           strokeDasharray="12 10"
           pointerEvents="none"
@@ -603,6 +612,7 @@ export function StratStageEditor({
           rotDist,
         );
         const rotPos = stratStagePinForDisplay(vb, side, rotStored);
+        const accentColor = bp?.color ?? "rgb(34, 211, 238)";
         /** Rectangle: cyan handle at geometric center; map pin (pos) is yellow edge. */
         const rectCenterPos =
           isRectOD && bp && bp.geometry.kind === "rectangle"
@@ -685,7 +695,8 @@ export function StratStageEditor({
                 y1={pos.y}
                 x2={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
                 y2={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
-                stroke="rgba(34, 211, 238, 0.7)"
+                stroke={accentColor}
+                opacity={0.75}
                 strokeWidth={Math.max(vbWidth * 0.0018, 0.85) * pinS}
                 strokeDasharray="6 5"
                 pointerEvents="none"
@@ -694,7 +705,7 @@ export function StratStageEditor({
                 cx={pos.x}
                 cy={pos.y}
                 r={Math.max(vbWidth * 0.01, 5) * pinS}
-                fill="rgb(250, 204, 21)"
+                fill={accentColor}
                 stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
                 strokeWidth={
                   Math.max(vbWidth * 0.0024, 1) * (sel ? 2.2 : 1) * pinS
@@ -724,7 +735,7 @@ export function StratStageEditor({
                 cx={isRectOD && rectCenterPos ? rectCenterPos.x : rotPos.x}
                 cy={isRectOD && rectCenterPos ? rectCenterPos.y : rotPos.y}
                 r={Math.max(vbWidth * 0.009, 4.5) * pinS}
-                fill="rgb(34, 211, 238)"
+                fill={accentColor}
                 stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
                 strokeWidth={
                   Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1) * pinS
@@ -1041,9 +1052,9 @@ export function StratStageEditor({
                       <>click the map to drop an agent token ({placementMode.slug}).</>
                     ) : placementMode.pendingOriginAttack ? (
                       <>
-                        Second click: <strong className="text-cyan-200">face</strong>{" "}
+                        Second click: <strong className="text-violet-200">face</strong>{" "}
                         {placementMode.slot.toUpperCase()} for {placementMode.slug}{" "}
-                        (cyan preview line).
+                        (color-matched preview line).
                       </>
                     ) : (
                       <>
@@ -1163,7 +1174,7 @@ export function StratStageEditor({
                                     : { kind: "ability", slug: r.slug, slot },
                                 )
                               }
-                              className={`flex min-h-[2.25rem] min-w-[3.25rem] max-w-[7rem] flex-col items-center justify-center rounded border px-1 py-0.5 text-left leading-tight transition ${
+                              className={`flex min-h-9 min-w-13 max-w-28 flex-col items-center justify-center rounded border px-1 py-0.5 text-left leading-tight transition ${
                                 placementMode?.kind === "ability" &&
                                 placementMode.slug === r.slug &&
                                 placementMode.slot === slot
@@ -1196,7 +1207,7 @@ export function StratStageEditor({
 
   const mapPanel =
     activeStage ? (
-      <div className="flex min-h-0 min-h-[min(56dvh,720px)] w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:flex-1">
+      <div className="flex min-h-[min(56dvh,720px)] w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:flex-1">
         <StratMapViewer
           ref={svgRef}
           gameMap={gameMap}

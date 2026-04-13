@@ -26,6 +26,32 @@ export type AgentAbilityShapeKind =
   | "arc"
   | "movement";
 
+export type AbilityTextureId =
+  | "solid"
+  | "diag_fwd"
+  | "diag_back"
+  | "crosshatch"
+  | "grid"
+  | "dots_small"
+  | "dots_large"
+  | "stripes_h"
+  | "stripes_v"
+  | "stripes_wide"
+  | "zigzag"
+  | "chevron"
+  | "triangles"
+  | "diamonds"
+  | "bricks"
+  | "weave"
+  | "waves"
+  | "rings"
+  | "radial"
+  | "pluses"
+  | "confetti"
+  | "stairs"
+  | "honeycomb"
+  | "sparse_cross";
+
 /** How this blueprint is dropped on the strat map. */
 export type StratPlacementMode = "center" | "origin_direction";
 
@@ -78,6 +104,8 @@ export interface AgentAbilityBlueprint {
   shapeKind: AgentAbilityShapeKind;
   /** Stroke/fill accent (CSS color). */
   color: string;
+  /** Optional texture/pattern fill used by map + editor previews. */
+  textureId?: AbilityTextureId;
   geometry: AgentAbilityGeometry;
   /**
    * Blueprint-space pivot: this point is placed on the strat map; rotation turns around it.

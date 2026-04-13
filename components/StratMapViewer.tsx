@@ -47,6 +47,8 @@ const WALKABLE_LOWER_FILL = "rgba(120,53,18,0.22)";
 const WALKABLE_LOWER_STROKE = "rgb(234,88,12)";
 const WALKABLE_UPPER_FILL = "rgba(14,165,233,0.24)";
 const WALKABLE_UPPER_STROKE = "rgb(56,189,248)";
+const TERRITORY_OUTLINE_FILL = "rgba(167,139,250,0.12)";
+const TERRITORY_OUTLINE_STROKE = "rgb(167,139,250)";
 
 function overlayFloor(sh: MapOverlayShape): MapFloorId {
   return sh.floor === "upper" ? "upper" : "lower";
@@ -88,9 +90,13 @@ function previewOverlayStrokePath(
 function overlayPolygonStyle(
   kind: MapOverlayKind,
   floor: MapFloorId = "lower",
+  muted = false,
 ): { fill: string; stroke: string } | null {
   switch (kind) {
     case "obstacle":
+      if (muted) {
+        return { fill: TERRITORY_OUTLINE_FILL, stroke: TERRITORY_OUTLINE_STROKE };
+      }
       return { fill: "rgba(251,191,36,0.14)", stroke: "rgb(251,191,36)" };
     case "elevation":
       return walkableElevationPolygonStyle(floor);
@@ -98,7 +104,7 @@ function overlayPolygonStyle(
       return { fill: "rgba(148,163,184,0.18)", stroke: "rgb(148,163,184)" };
     case "plant_site":
       return {
-        fill: "rgba(255,62,62,0.16)",
+        fill: "rgba(255,62,62,0.09)",
         stroke: SPAWN_ATK_FILL,
       };
     case "grade":
@@ -295,8 +301,8 @@ const DEFAULT_VISIBILITY: StratMapLayerVisibility = {
   spawnDef: true,
   floorLower: true,
   floorUpper: true,
-  obstacle: true,
-  elevation: true,
+  obstacle: false,
+  elevation: false,
   wall: true,
   plant_site: true,
   grade: true,
@@ -330,7 +336,7 @@ function overlayVisible(
   sh: MapOverlayShape,
   vis: StratMapLayerVisibility,
 ): boolean {
-  if (!vis[sh.kind]) return false;
+  if (sh.kind !== "obstacle" && !vis[sh.kind]) return false;
   const f = overlayFloor(sh);
   if (f === "lower" && !vis.floorLower) return false;
   if (f === "upper" && !vis.floorUpper) return false;
@@ -576,7 +582,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
           {toggleRow("spawnDef", "Spawns · Defense")}
           {toggleRow("floorLower", "Floor · Lower")}
           {toggleRow("floorUpper", "Floor · Upper")}
-          {toggleRow("obstacle", "Obstacles")}
+          {toggleRow("obstacle", "Obstacle emphasis")}
           {toggleRow("elevation", "Walkable zones")}
           {toggleRow("wall", "Walls")}
           {toggleRow("plant_site", "Plant sites")}
@@ -651,9 +657,9 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
             territoryPathD.trim().length > 0 && (
               <path
                 d={territoryPathD}
-                fill="rgba(167,139,250,0.12)"
+                fill={TERRITORY_OUTLINE_FILL}
                 fillRule="evenodd"
-                stroke="rgb(167,139,250)"
+                stroke={TERRITORY_OUTLINE_STROKE}
                 strokeWidth={vb.width * 0.004 * MAP_VIEW_VECTOR_STROKE_SCALE}
                 strokeLinejoin="round"
                 pointerEvents="none"
@@ -708,7 +714,11 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
               }
               const d = previewOverlayStrokePath(sh.kind, sh.points);
               if (!d) return null;
-              const poly = overlayPolygonStyle(sh.kind, overlayFloor(sh));
+              const poly = overlayPolygonStyle(
+                sh.kind,
+                overlayFloor(sh),
+                sh.kind === "obstacle" && !effectiveVis.obstacle,
+              );
               if (!poly) return null;
               return (
                 <g key={sh.id}>

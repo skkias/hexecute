@@ -6,6 +6,7 @@ import type {
   StratPlacementMode,
 } from "@/types/agent-ability";
 import type { MapPoint } from "@/lib/map-path";
+import { normalizeAbilityTextureId } from "@/lib/ability-textures";
 
 const SLOTS: AgentAbilitySlot[] = ["q", "e", "c", "x"];
 
@@ -263,6 +264,7 @@ export function normalizeAgentAbilityBlueprint(raw: unknown): AgentAbilityBluepr
   const pointIconScale = normalizePointIconScale(
     o.pointIconScale ?? o.point_icon_scale,
   );
+  const textureId = normalizeAbilityTextureId(o.textureId ?? o.texture_id);
   const base: AgentAbilityBlueprint = {
     id,
     slot,
@@ -275,6 +277,7 @@ export function normalizeAgentAbilityBlueprint(raw: unknown): AgentAbilityBluepr
   if (stratPlacementMode) base.stratPlacementMode = stratPlacementMode;
   if (pointIconShow === false) base.pointIconShow = false;
   if (pointIconScale !== undefined) base.pointIconScale = pointIconScale;
+  if (textureId) base.textureId = textureId;
   return base;
 }
 

@@ -3,6 +3,8 @@
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { AgentAbilityBlueprint, AgentAbilityGeometry } from "@/types/agent-ability";
 import { blueprintStratAnchor } from "@/lib/strat-blueprint-anchor";
+import { rgbaWithAlpha } from "@/lib/ability-textures";
+import { AbilityTextureDefs } from "@/components/ability/AbilityTextureDefs";
 import {
   BLUEPRINT_CANVAS_SIZE,
   stratBlueprintUnitsToMapScale,
@@ -145,7 +147,12 @@ export function StratAbilityBlueprintSvg({
 }) {
   const g = blueprint.geometry;
   const stroke = blueprint.color;
-  const fill = `${blueprint.color}44`;
+  const fill = rgbaWithAlpha(blueprint.color, 0.27);
+  const texturePatternId = `abtx-map-${blueprint.id}`;
+  const textureFill =
+    blueprint.textureId && blueprint.textureId !== "solid"
+      ? `url(#${texturePatternId})`
+      : fill;
   const anchor = stratAnchorOverride ?? blueprintStratAnchor(blueprint);
   const scale =
     stratBlueprintUnitsToMapScale(vbWidth) *
@@ -196,7 +203,7 @@ export function StratAbilityBlueprintSvg({
             cx={g.cx}
             cy={g.cy}
             r={g.r}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             {...commonStroke}
           />
@@ -224,7 +231,7 @@ export function StratAbilityBlueprintSvg({
         <g opacity={op} style={{ pointerEvents }}>
           <polygon
             points={`${g.ox},${g.oy} ${g.lx},${g.ly} ${g.rx},${g.ry}`}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             strokeLinejoin="round"
             {...commonStroke}
@@ -256,7 +263,7 @@ export function StratAbilityBlueprintSvg({
         <g opacity={op} style={{ pointerEvents }}>
           <polygon
             points={g.points.map((p) => `${p.x},${p.y}`).join(" ")}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             strokeLinejoin="round"
             {...commonStroke}
@@ -272,7 +279,7 @@ export function StratAbilityBlueprintSvg({
             y={g.y}
             width={g.w}
             height={g.h}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             {...commonStroke}
             transform={
@@ -326,7 +333,7 @@ export function StratAbilityBlueprintSvg({
             cx={m.bx}
             cy={m.by}
             r={BP * 0.01}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             {...commonStroke}
           />
@@ -340,5 +347,14 @@ export function StratAbilityBlueprintSvg({
 
   if (!inner) return null;
 
-  return <g transform={transform}>{inner}</g>;
+  return (
+    <g transform={transform}>
+      <AbilityTextureDefs
+        patternId={texturePatternId}
+        textureId={blueprint.textureId}
+        color={blueprint.color}
+      />
+      {inner}
+    </g>
+  );
 }

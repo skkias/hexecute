@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Save, Trash2 } from "lucide-react";
 import type { Agent } from "@/types/catalog";
 import type {
+  AbilityTextureId,
   AgentAbilityBlueprint,
   AgentAbilityGeometry,
   AgentAbilityShapeKind,
@@ -41,6 +42,8 @@ import {
   effectiveStratPlacementMode,
 } from "@/lib/strat-blueprint-anchor";
 import type { StratPlacementMode } from "@/types/agent-ability";
+import { ABILITY_TEXTURE_OPTIONS, rgbaWithAlpha } from "@/lib/ability-textures";
+import { AbilityTextureDefs } from "@/components/ability/AbilityTextureDefs";
 
 const VB = BLUEPRINT_CANVAS_SIZE;
 const VB_STR = `0 0 ${VB} ${VB}`;
@@ -273,7 +276,12 @@ function AbilityShapePreview({
 }) {
   const g = b.geometry;
   const stroke = b.color;
-  const fill = `${b.color}33`;
+  const fill = rgbaWithAlpha(b.color, 0.2);
+  const texturePatternId = `abtx-editor-${b.id}`;
+  const textureFill =
+    b.textureId && b.textureId !== "solid"
+      ? `url(#${texturePatternId})`
+      : fill;
   const sw = VB * 0.004;
   const op = dimmed ? 0.35 : 0.95;
 
@@ -294,11 +302,16 @@ function AbilityShapePreview({
     case "circle":
       return (
         <g opacity={op}>
+          <AbilityTextureDefs
+            patternId={texturePatternId}
+            textureId={b.textureId}
+            color={b.color}
+          />
           <circle
             cx={g.cx}
             cy={g.cy}
             r={g.r}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             strokeWidth={sw}
           />
@@ -321,9 +334,14 @@ function AbilityShapePreview({
     case "cone":
       return (
         <g opacity={op}>
+          <AbilityTextureDefs
+            patternId={texturePatternId}
+            textureId={b.textureId}
+            color={b.color}
+          />
           <polygon
             points={`${g.ox},${g.oy} ${g.lx},${g.ly} ${g.rx},${g.ry}`}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             strokeWidth={sw}
             strokeLinejoin="round"
@@ -348,9 +366,14 @@ function AbilityShapePreview({
     case "polygon":
       return (
         <g opacity={op}>
+          <AbilityTextureDefs
+            patternId={texturePatternId}
+            textureId={b.textureId}
+            color={b.color}
+          />
           <polygon
             points={g.points.map((p) => `${p.x},${p.y}`).join(" ")}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             strokeWidth={sw}
             strokeLinejoin="round"
@@ -360,12 +383,17 @@ function AbilityShapePreview({
     case "rectangle":
       return (
         <g opacity={op}>
+          <AbilityTextureDefs
+            patternId={texturePatternId}
+            textureId={b.textureId}
+            color={b.color}
+          />
           <rect
             x={g.x}
             y={g.y}
             width={g.w}
             height={g.h}
-            fill={fill}
+            fill={textureFill}
             stroke={stroke}
             strokeWidth={sw}
             transform={
@@ -392,6 +420,11 @@ function AbilityShapePreview({
       const m = g;
       return (
         <g opacity={op}>
+          <AbilityTextureDefs
+            patternId={texturePatternId}
+            textureId={b.textureId}
+            color={b.color}
+          />
           <line
             x1={m.ax}
             y1={m.ay}
@@ -407,7 +440,7 @@ function AbilityShapePreview({
             cx={m.bx}
             cy={m.by}
             r={VB * 0.011}
-            fill={`${b.color}55`}
+            fill={textureFill}
             stroke={stroke}
             strokeWidth={sw * 0.85}
           />
@@ -424,6 +457,7 @@ type Placement = {
   name: string;
   shapeKind: AgentAbilityShapeKind;
   color: string;
+  textureId?: AbilityTextureId;
   points: MapPoint[];
 };
 
@@ -545,6 +579,7 @@ export function AgentAbilityEditor({
   const [draftName, setDraftName] = useState("");
   const [draftShape, setDraftShape] = useState<AgentAbilityShapeKind>("circle");
   const [draftColor, setDraftColor] = useState("#a78bfa");
+  const [draftTexture, setDraftTexture] = useState<AbilityTextureId>("diag_fwd");
   const [previewMapId, setPreviewMapId] = useState<string | null>(
     maps[0]?.id ?? null,
   );
@@ -594,10 +629,11 @@ export function AgentAbilityEditor({
       name,
       shapeKind: draftShape,
       color: draftColor,
+      textureId: draftTexture,
       points: [],
     });
     setBanner(null);
-  }, [draftSlot, draftName, draftShape, draftColor]);
+  }, [draftSlot, draftName, draftShape, draftColor, draftTexture]);
 
   const cancelPlacement = useCallback(() => {
     setPlacement(null);
@@ -649,6 +685,7 @@ export function AgentAbilityEditor({
         name: placement.name,
         shapeKind: placement.shapeKind,
         color: placement.color,
+        textureId: placement.textureId,
         geometry: geo,
         stratPlacementMode: defaultStratPlacementForShape(placement.shapeKind),
       };
@@ -712,6 +749,7 @@ export function AgentAbilityEditor({
           | "stratPlacementMode"
           | "pointIconShow"
           | "pointIconScale"
+          | "textureId"
         >
       >,
     ) => {
@@ -740,6 +778,13 @@ export function AgentAbilityEditor({
               delete n.pointIconScale;
             } else {
               n.pointIconScale = patch.pointIconScale;
+            }
+          }
+          if ("textureId" in patch) {
+            if (patch.textureId === undefined || patch.textureId === "solid") {
+              delete n.textureId;
+            } else {
+              n.textureId = patch.textureId;
             }
           }
           return n;
@@ -872,7 +917,7 @@ export function AgentAbilityEditor({
               value={snapStep}
               onChange={(e) => setSnapStep(Number(e.target.value))}
               disabled={!!placement}
-              className="input-field max-w-[11rem] py-1.5 text-xs"
+              className="input-field max-w-44 py-1.5 text-xs"
               aria-label="Blueprint snap grid"
             >
               <option value={0}>Off — freehand</option>
@@ -966,6 +1011,7 @@ export function AgentAbilityEditor({
                   {(() => {
                     const { x, y } = blueprintStratAnchor(selected);
                     const w = VB * 0.024;
+                    const anchorColor = selected.color;
                     return (
                       <g pointerEvents="none" opacity={0.95}>
                         <line
@@ -973,7 +1019,7 @@ export function AgentAbilityEditor({
                           y1={y}
                           x2={x + w}
                           y2={y}
-                          stroke="rgb(250, 204, 21)"
+                          stroke={anchorColor}
                           strokeWidth={VB * 0.003}
                         />
                         <line
@@ -981,14 +1027,14 @@ export function AgentAbilityEditor({
                           y1={y - w}
                           x2={x}
                           y2={y + w}
-                          stroke="rgb(250, 204, 21)"
+                          stroke={anchorColor}
                           strokeWidth={VB * 0.003}
                         />
                         <circle
                           cx={x}
                           cy={y}
                           r={VB * 0.006}
-                          fill="rgb(250, 204, 21)"
+                          fill={anchorColor}
                           stroke="rgb(15,23,42)"
                           strokeWidth={VB * 0.0015}
                         />
@@ -1018,8 +1064,8 @@ export function AgentAbilityEditor({
                     cx={p.x}
                     cy={p.y}
                     r={VB * 0.012}
-                    fill="rgb(250,250,250)"
-                    stroke="rgb(167,139,250)"
+                    fill={rgbaWithAlpha(placement.color, 0.92)}
+                    stroke={placement.color}
                     strokeWidth={VB * 0.003}
                     pointerEvents="none"
                   />
@@ -1030,7 +1076,7 @@ export function AgentAbilityEditor({
                     .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`)
                     .join(" ")}
                   fill="none"
-                  stroke="rgba(167,139,250,0.6)"
+                  stroke={rgbaWithAlpha(placement.color, 0.62)}
                   strokeWidth={VB * 0.004}
                   strokeDasharray="12 8"
                   pointerEvents="none"
@@ -1039,8 +1085,8 @@ export function AgentAbilityEditor({
               {placement && placement.shapeKind === "polygon" && placement.points.length >= 2 ? (
                 <polygon
                   points={placement.points.map((p) => `${p.x},${p.y}`).join(" ")}
-                  fill="rgba(167,139,250,0.12)"
-                  stroke="rgba(167,139,250,0.55)"
+                  fill={rgbaWithAlpha(placement.color, 0.12)}
+                  stroke={rgbaWithAlpha(placement.color, 0.55)}
                   strokeWidth={VB * 0.003}
                   strokeDasharray="10 6"
                   pointerEvents="none"
@@ -1210,6 +1256,24 @@ export function AgentAbilityEditor({
               className="h-10 w-full cursor-pointer rounded border border-violet-800/50 bg-slate-950"
               disabled={!!placement}
             />
+          </div>
+          <div className="space-y-2">
+            <label className="label" htmlFor="ab-texture">
+              Texture
+            </label>
+            <select
+              id="ab-texture"
+              value={draftTexture}
+              onChange={(e) => setDraftTexture(e.target.value as AbilityTextureId)}
+              className="input-field"
+              disabled={!!placement}
+            >
+              {ABILITY_TEXTURE_OPTIONS.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             type="button"
@@ -1428,6 +1492,31 @@ export function AgentAbilityEditor({
                     >
                       Reset icon size
                     </button>
+                  </div>
+                ) : null}
+                {selected.shapeKind !== "point" ? (
+                  <div className="space-y-2 rounded-md border border-violet-800/35 bg-slate-950/45 p-2.5">
+                    <h4 className="text-[11px] font-semibold text-violet-100/90">
+                      Texture
+                    </h4>
+                    <label className="block text-[10px] text-violet-400/90">
+                      Fill pattern
+                      <select
+                        value={selected.textureId ?? "solid"}
+                        onChange={(e) =>
+                          updateSelectedBlueprintMeta({
+                            textureId: e.target.value as AbilityTextureId,
+                          })
+                        }
+                        className="input-field mt-0.5 w-full text-xs"
+                      >
+                        {ABILITY_TEXTURE_OPTIONS.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 ) : null}
                 <BlueprintGeometryFields
