@@ -1,10 +1,10 @@
 import type { GameMap } from "@/types/catalog";
 import {
-  flipPointsThroughViewBoxCenter,
+  flipPointsOverHorizontalMidline,
   type MapPoint,
   type ViewBoxRect,
 } from "@/lib/map-path";
-import { stratSideDisplayFlip } from "@/lib/strat-side-display-geometry";
+import { stratDisplayUsesPathDefOutline } from "@/lib/strat-side-display-geometry";
 import type { StratSide } from "@/types/strat";
 
 function stratStoredAttackPointToDisplay(
@@ -13,14 +13,13 @@ function stratStoredAttackPointToDisplay(
   side: StratSide,
   p: MapPoint,
 ): MapPoint {
-  const mode = stratSideDisplayFlip(map, side);
-  if (mode === "none") return p;
-  return flipPointsThroughViewBoxCenter(vb, [p])[0]!;
+  if (!stratDisplayUsesPathDefOutline(map, side)) return p;
+  return flipPointsOverHorizontalMidline(vb, [p])[0]!;
 }
 
 /**
- * Stage pins are stored in attack-side viewBox coordinates. Display matches
- * {@link stratMapDisplayData} (180° flip when showing the mirrored strat side).
+ * Stage pins are stored in `path_atk` coordinates. When the viewer shows `path_def`, mirror
+ * into that frame (same as `stratMapDisplayData`).
  */
 export function stratStagePinForDisplay(
   vb: ViewBoxRect,
