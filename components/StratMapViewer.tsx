@@ -296,7 +296,7 @@ export type StratMapLayerVisibility = {
 
 const DEFAULT_VISIBILITY: StratMapLayerVisibility = {
   territoryOutline: true,
-  labels: true,
+  labels: false,
   spawnAtk: true,
   spawnDef: true,
   floorLower: true,

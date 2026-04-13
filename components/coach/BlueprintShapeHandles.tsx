@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentAbilityBlueprint, AgentAbilityGeometry } from "@/types/agent-ability";
 import type { MapPoint } from "@/lib/map-path";
 import { clientToSvgPoint } from "@/lib/svg-coords";
@@ -35,19 +35,26 @@ export function BlueprintShapeHandles({
   vb,
   svgRef,
   snapStep,
+  pointDisplayIconUrl,
   onChange,
 }: {
   blueprint: AgentAbilityBlueprint;
   vb: number;
   svgRef: React.RefObject<SVGSVGElement | null>;
   snapStep: number;
+  pointDisplayIconUrl?: string | null;
   onChange: (g: AgentAbilityGeometry) => void;
 }) {
   const dragCtx = useRef<DragCtx | null>(null);
   const geom = blueprint.geometry;
+  const [pointIconFailed, setPointIconFailed] = useState(false);
   /** Latest geometry while dragging (poly vertex drags need fresh points). */
   const liveGeomRef = useRef(geom);
   liveGeomRef.current = geom;
+
+  useEffect(() => {
+    setPointIconFailed(false);
+  }, [blueprint.id, pointDisplayIconUrl]);
 
   const toBp = useCallback(
     (clientX: number, clientY: number): MapPoint => {
@@ -142,11 +149,62 @@ export function BlueprintShapeHandles({
 
   switch (geom.kind) {
     case "point":
-      return (
-        <g style={{ pointerEvents: "auto" }} data-blueprint-handles>
-          {handleEl(geom.x, geom.y, "point", geom)}
-        </g>
-      );
+      {
+        const iconUrl =
+          typeof pointDisplayIconUrl === "string" &&
+          pointDisplayIconUrl.startsWith("http") &&
+          !pointIconFailed
+            ? pointDisplayIconUrl
+            : null;
+        const iconSize = vb * 0.05;
+        const half = iconSize / 2;
+        return (
+          <g style={{ pointerEvents: "auto" }} data-blueprint-handles>
+            <g
+              className="cursor-grab touch-none active:cursor-grabbing"
+              onPointerDown={(e) => beginDrag(e, "point", geom)}
+            >
+              {iconUrl ? (
+                <image
+                  href={iconUrl}
+                  x={geom.x - half}
+                  y={geom.y - half}
+                  width={iconSize}
+                  height={iconSize}
+                  preserveAspectRatio="xMidYMid meet"
+                  onError={() => setPointIconFailed(true)}
+                  style={{ pointerEvents: "none" }}
+                />
+              ) : (
+                <circle
+                  cx={geom.x}
+                  cy={geom.y}
+                  r={r}
+                  fill={fill}
+                  stroke={stroke}
+                  strokeWidth={vb * 0.002}
+                  style={{ pointerEvents: "none" }}
+                />
+              )}
+              <circle
+                cx={geom.x}
+                cy={geom.y}
+                r={iconUrl ? half * 0.72 : r}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={vb * 0.002}
+                style={{ pointerEvents: "none" }}
+              />
+              <circle
+                cx={geom.x}
+                cy={geom.y}
+                r={Math.max(r * 1.25, half * 0.95)}
+                fill="transparent"
+              />
+            </g>
+          </g>
+        );
+      }
     case "circle": {
       const { cx, cy, r: rad } = geom;
       const rimX = cx + rad;

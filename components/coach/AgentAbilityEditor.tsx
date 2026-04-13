@@ -907,7 +907,7 @@ export function AgentAbilityEditor({
         ) : null}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-800/30 bg-slate-950/55 px-3 py-2 text-xs text-violet-200/90">
             <span className="text-violet-400/90">
@@ -933,19 +933,20 @@ export function AgentAbilityEditor({
             move. While placing a new shape, move the pointer to preview before you click.
           </p>
           <div className="overflow-hidden rounded-xl border border-violet-500/25 bg-slate-950/80">
-            <svg
-              ref={svgRef}
-              viewBox={VB_STR}
-              className="h-auto w-full max-h-[min(70dvh,720px)] cursor-crosshair touch-none select-none"
-              onClick={onSvgClick}
-              onPointerMove={(e) => {
-                if (!placement || !svgRef.current) return;
-                const raw = clientToSvgPoint(svgRef.current, e.clientX, e.clientY);
-                setCursorBp(applySnap({ x: raw.x, y: raw.y }));
-              }}
-              onPointerLeave={() => setCursorBp(null)}
-              role="presentation"
-            >
+            <div className="mx-auto w-full max-w-[min(100%,78dvh)] p-1.5">
+              <svg
+                ref={svgRef}
+                viewBox={VB_STR}
+                className="block aspect-square h-auto max-h-[76dvh] min-h-[320px] w-full cursor-crosshair touch-none select-none"
+                onClick={onSvgClick}
+                onPointerMove={(e) => {
+                  if (!placement || !svgRef.current) return;
+                  const raw = clientToSvgPoint(svgRef.current, e.clientX, e.clientY);
+                  setCursorBp(applySnap({ x: raw.x, y: raw.y }));
+                }}
+                onPointerLeave={() => setCursorBp(null)}
+                role="presentation"
+              >
               <rect width={VB} height={VB} fill="rgb(15,23,42)" />
               <g pointerEvents="none" opacity={0.55}>
                 {Array.from({ length: 11 }, (_, i) => (
@@ -1092,16 +1093,26 @@ export function AgentAbilityEditor({
                   pointerEvents="none"
                 />
               ) : null}
-              {selected && !placement ? (
-                <BlueprintShapeHandles
-                  blueprint={selected}
-                  vb={VB}
-                  svgRef={svgRef}
-                  snapStep={snapStep}
-                  onChange={updateSelectedGeometry}
-                />
-              ) : null}
-            </svg>
+                {selected && !placement ? (
+                  <BlueprintShapeHandles
+                    blueprint={selected}
+                    vb={VB}
+                    svgRef={svgRef}
+                    snapStep={snapStep}
+                  pointDisplayIconUrl={
+                    selected.shapeKind === "point"
+                      ? abilityMetaForSlot(
+                          valorantUiBySlug ?? {},
+                          agent.slug,
+                          selected.slot,
+                        )?.displayIcon ?? null
+                      : null
+                  }
+                    onChange={updateSelectedGeometry}
+                  />
+                ) : null}
+              </svg>
+            </div>
           </div>
           {placement ? (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-violet-800/40 bg-violet-950/25 px-3 py-2 text-sm text-violet-100/90">
