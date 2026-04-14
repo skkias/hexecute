@@ -1,7 +1,10 @@
 import type { MapPoint } from "@/lib/map-path";
 
-/** Keyboard row slots (Valorant-style). */
-export type AgentAbilitySlot = "q" | "e" | "c" | "x";
+/**
+ * Valorant-style keyboard row, plus `custom` for named utilities with no bound key
+ * (e.g. Astra stars, passives, extra kit).
+ */
+export type AgentAbilitySlot = "q" | "e" | "c" | "x" | "custom";
 
 /**
  * High-level shape category for minimap / blueprint drawing (ValoPlant-like).
@@ -75,10 +78,12 @@ export type AgentAbilityGeometry =
        */
       curve?: { cx: number; cy: number };
       /**
-       * Optional wall visual state on strat map (e.g. Viper wall toggled down/up).
-       * Omitted = default/up.
+       * When true, this ray supports on-map up/down toggling per placed ability.
+       * The stage instance stores current on/off state.
        */
-      wallState?: "up" | "down";
+      toggleable?: boolean;
+      /** Stroke thickness multiplier vs default line weight (1 = default). */
+      strokeWidthMul?: number;
     }
   /**
    * Triangular wedge from origin: apex → left boundary → right boundary.

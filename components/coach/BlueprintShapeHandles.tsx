@@ -107,9 +107,13 @@ export function BlueprintShapeHandles({
       const ctx = dragCtx.current;
       if (!ctx) return;
       const extended =
-        ctx.handleId === "mov-b" &&
-        (ctx.startGeom.kind === "movement" ||
-          ctx.startGeom.kind === "ricochet");
+        (ctx.handleId === "mov-b" &&
+          (ctx.startGeom.kind === "movement" ||
+            ctx.startGeom.kind === "ricochet")) ||
+        (ctx.startGeom.kind === "ray" &&
+          (ctx.handleId === "ray-a" ||
+            ctx.handleId === "ray-b" ||
+            ctx.handleId === "ray-c"));
       const p = pointerToBlueprintPoint(e.clientX, e.clientY, extended);
       const next = computeDraggedGeometry(
         ctx.handleId,
@@ -133,8 +137,10 @@ export function BlueprintShapeHandles({
     e.preventDefault();
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const extended =
-      handleId === "mov-b" &&
-      (startGeom.kind === "movement" || startGeom.kind === "ricochet");
+      (handleId === "mov-b" &&
+        (startGeom.kind === "movement" || startGeom.kind === "ricochet")) ||
+      (startGeom.kind === "ray" &&
+        (handleId === "ray-a" || handleId === "ray-b" || handleId === "ray-c"));
     dragCtx.current = {
       handleId,
       startPointer: pointerToBlueprintPoint(e.clientX, e.clientY, extended),

@@ -19,7 +19,13 @@ const TRANSITIONS: StratStageTransition[] = [
   "slide-right",
 ];
 
-const ABILITY_SLOTS: StratPlacedAbility["slot"][] = ["q", "e", "c", "x"];
+const ABILITY_SLOTS: StratPlacedAbility["slot"][] = [
+  "q",
+  "e",
+  "c",
+  "x",
+  "custom",
+];
 const VISION_CONE_WIDTHS: StratVisionConeWidth[] = ["wide", "thin"];
 
 function newId(): string {
@@ -102,6 +108,12 @@ function normalizeAbility(raw: unknown): StratPlacedAbility | null {
       ? (slotRaw as StratPlacedAbility["slot"])
       : null;
   if (!agentSlug || !slot) return null;
+  const bidOutRaw = o.abilityBlueprintId ?? o.ability_blueprint_id;
+  const abilityBlueprintId =
+    typeof bidOutRaw === "string" && bidOutRaw.trim()
+      ? bidOutRaw.trim()
+      : undefined;
+  if (slot === "custom" && !abilityBlueprintId) return null;
   const x = isFiniteNum(o.x) ? o.x : 0;
   const y = isFiniteNum(o.y) ? o.y : 0;
   const rotRaw = o.rotationDeg ?? o.rotation_deg;
@@ -111,9 +123,13 @@ function normalizeAbility(raw: unknown): StratPlacedAbility | null {
     typeof attachedRaw === "string" && attachedRaw.trim()
       ? attachedRaw.trim()
       : undefined;
+  const toggledRaw = o.toggledOn ?? o.toggled_on;
+  const toggledOn = typeof toggledRaw === "boolean" ? toggledRaw : undefined;
   const out: StratPlacedAbility = { id, agentSlug, slot, x, y };
+  if (abilityBlueprintId) out.abilityBlueprintId = abilityBlueprintId;
   if (rotationDeg !== undefined) out.rotationDeg = rotationDeg;
   if (attachedToAgentId) out.attachedToAgentId = attachedToAgentId;
+  if (toggledOn !== undefined) out.toggledOn = toggledOn;
   return out;
 }
 

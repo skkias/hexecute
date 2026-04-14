@@ -138,6 +138,7 @@ export function StratAbilityBlueprintSvg({
   stratAnchorOverride,
   mapPinScale = 1,
   visionLosContext,
+  rayToggledOn = true,
 }: {
   blueprint: AgentAbilityBlueprint;
   mapX: number;
@@ -153,6 +154,8 @@ export function StratAbilityBlueprintSvg({
   mapPinScale?: number;
   /** Optional map geometry for LOS clipping on vision cones. */
   visionLosContext?: VisionLosContext | null;
+  /** For toggleable ray blueprints: per-stage on/off state (`false` = down/inactive). */
+  rayToggledOn?: boolean;
 }) {
   const g = blueprint.geometry;
   const stroke = blueprint.color;
@@ -224,11 +227,19 @@ export function StratAbilityBlueprintSvg({
       break;
     case "ray":
       {
-        const wallOpacity = g.wallState === "down" ? op * 0.42 : op;
+        const legacyWallDown = (g as { wallState?: "up" | "down" }).wallState === "down";
+        const wallDown = legacyWallDown || (g.toggleable === true && rayToggledOn === false);
+        const wallOpacity = wallDown ? op * 0.42 : op;
         const wallDash =
-          g.wallState === "down"
+          wallDown
             ? `${vbWidth * 0.01 * MAP_BLUEPRINT_STROKE_SCALE} ${vbWidth * 0.01 * MAP_BLUEPRINT_STROKE_SCALE}`
             : undefined;
+        const strokeMul =
+          typeof g.strokeWidthMul === "number" &&
+          Number.isFinite(g.strokeWidthMul) &&
+          g.strokeWidthMul > 0
+            ? Math.min(8, Math.max(0.2, g.strokeWidthMul))
+            : 1;
         const d = g.curve
           ? `M ${g.x1} ${g.y1} Q ${g.curve.cx} ${g.curve.cy} ${g.x2} ${g.y2}`
           : `M ${g.x1} ${g.y1} L ${g.x2} ${g.y2}`;
@@ -242,7 +253,7 @@ export function StratAbilityBlueprintSvg({
               strokeLinejoin="round"
               strokeDasharray={wallDash}
               {...commonStroke}
-              strokeWidth={swMap * 1.5}
+              strokeWidth={swMap * 1.5 * strokeMul}
             />
           </g>
         );

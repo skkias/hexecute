@@ -26,7 +26,10 @@ import {
   rootPointToLogicalGeometry,
 } from "@/lib/map-geometry-scale";
 import { clientToSvgPoint } from "@/lib/svg-coords";
-import { allowedAbilitySlotsFromBlueprint } from "@/lib/agent-blueprint-ability-slots";
+import {
+  abilityPlacementOptionsFromBlueprint,
+  type AbilityPlacementOption,
+} from "@/lib/agent-blueprint-ability-slots";
 import { createEmptyStratStage } from "@/lib/strat-stages";
 import {
   abilityMetaForSlot,
@@ -45,9 +48,7 @@ import {
   stratAbilityPinDimensions,
   writeCoachMapPinScale,
 } from "@/lib/strat-map-pin-scale";
-import {
-  abilitySlotLabel,
-} from "@/lib/strat-stage-pin-styles";
+import { placedAbilityPinLabel } from "@/lib/strat-stage-pin-styles";
 import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
 import { StratAbilityBlueprintSvg } from "@/components/StratAbilityBlueprintSvg";
 import {
@@ -103,9 +104,30 @@ type PlacementMode =
       kind: "ability";
       slug: string;
       slot: StratPlacedAbility["slot"];
+      /** Set when `slot === "custom"` (matches `AgentAbilityBlueprint.id`). */
+      abilityBlueprintId?: string;
       /** First click stored (attack coords) when using origin + direction placement. */
       pendingOriginAttack?: { x: number; y: number };
     };
+
+function abilityFieldsFromPlacementMode(
+  m: Extract<PlacementMode, { kind: "ability" }>,
+): Pick<StratPlacedAbility, "slot" | "abilityBlueprintId"> {
+  if (m.slot === "custom" && m.abilityBlueprintId) {
+    return { slot: "custom", abilityBlueprintId: m.abilityBlueprintId };
+  }
+  return { slot: m.slot };
+}
+
+function isActiveAbilityPlacementOption(
+  m: PlacementMode,
+  slug: string,
+  opt: AbilityPlacementOption,
+): boolean {
+  if (!m || m.kind !== "ability" || m.slug !== slug) return false;
+  if (opt.kind === "key") return m.slot === opt.slot;
+  return m.slot === "custom" && m.abilityBlueprintId === opt.blueprintId;
+}
 
 type DragState =
   | {
@@ -225,6 +247,8 @@ export function StratStageEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [agentStageTrans, setAgentStageTrans] =
     useState<StratAgentTokenTransition | null>(null);
+  const [mapLayersModalOpen, setMapLayersModalOpen] = useState(false);
+  const [mapResetZoomSignal, setMapResetZoomSignal] = useState(0);
   /** Left column: stage fields vs token placement controls. */
   const [tokenTrayOpenSlug, setTokenTrayOpenSlug] = useState<string | null>(
     null,
@@ -322,7 +346,7 @@ export function StratStageEditor({
           themeColor: a.theme_color ?? null,
           portraitUrl:
             raw?.startsWith("https://") === true ? raw : null,
-          allowedAbilitySlots: allowedAbilitySlotsFromBlueprint(
+          abilityPlacementOptions: abilityPlacementOptionsFromBlueprint(
             a.abilities_blueprint,
           ),
         };
@@ -334,7 +358,7 @@ export function StratStageEditor({
           role: string;
           themeColor: string | null;
           portraitUrl: string | null;
-          allowedAbilitySlots: StratPlacedAbility["slot"][];
+          abilityPlacementOptions: AbilityPlacementOption[];
         } => x != null,
       );
   }, [compSlugs, agentsCatalog]);
@@ -630,6 +654,7 @@ export function StratStageEditor({
   useEffect(() => {
     setTokenTrayOpenSlug(null);
     setAgentVisionContextMenu(null);
+    setMapLayersModalOpen(false);
   }, [activeStageIndex]);
 
   useEffect(() => {
@@ -836,7 +861,20 @@ export function StratStageEditor({
       agentsCatalog,
       placementMode.slug,
       placementMode.slot,
+      placementMode.abilityBlueprintId,
     );
+    const withToggleDefault = (
+      placed: StratPlacedAbility,
+    ): StratPlacedAbility => {
+      if (
+        bp?.shapeKind === "ray" &&
+        bp.geometry.kind === "ray" &&
+        bp.geometry.toggleable === true
+      ) {
+        return { ...placed, toggledOn: true };
+      }
+      return placed;
+    };
     const placeMode = bp
       ? effectiveStratPlacementMode(bp)
       : "center";
@@ -858,23 +896,29 @@ export function StratStageEditor({
         const next: StratPlacedAbility = {
           id: newItemId(),
           agentSlug: placementMode.slug,
-          slot: placementMode.slot,
+          ...abilityFieldsFromPlacementMode(placementMode),
           x: ag.x,
           y: ag.y,
           rotationDeg,
           attachedToAgentId: ag.id,
         };
-        setAbilities(activeStageIndex, [...activeStage.abilities, next]);
+        setAbilities(
+          activeStageIndex,
+          [...activeStage.abilities, withToggleDefault(next)],
+        );
       } else {
         const next: StratPlacedAbility = {
           id: newItemId(),
           agentSlug: placementMode.slug,
-          slot: placementMode.slot,
+          ...abilityFieldsFromPlacementMode(placementMode),
           x: ag.x,
           y: ag.y,
           attachedToAgentId: ag.id,
         };
-        setAbilities(activeStageIndex, [...activeStage.abilities, next]);
+        setAbilities(
+          activeStageIndex,
+          [...activeStage.abilities, withToggleDefault(next)],
+        );
       }
       setPlacementMode(null);
       setAbilityDirPreview(null);
@@ -888,6 +932,7 @@ export function StratStageEditor({
           kind: "ability",
           slug: placementMode.slug,
           slot: placementMode.slot,
+          abilityBlueprintId: placementMode.abilityBlueprintId,
           pendingOriginAttack: { x: p.x, y: p.y },
         });
         setSelectedId(null);
@@ -898,12 +943,15 @@ export function StratStageEditor({
       const next: StratPlacedAbility = {
         id: newItemId(),
         agentSlug: placementMode.slug,
-        slot: placementMode.slot,
+        ...abilityFieldsFromPlacementMode(placementMode),
         x: o.x,
         y: o.y,
         rotationDeg,
       };
-      setAbilities(activeStageIndex, [...activeStage.abilities, next]);
+      setAbilities(
+        activeStageIndex,
+        [...activeStage.abilities, withToggleDefault(next)],
+      );
       setPlacementMode(null);
       setAbilityDirPreview(null);
       setSelectedId(null);
@@ -913,11 +961,14 @@ export function StratStageEditor({
     const next: StratPlacedAbility = {
       id: newItemId(),
       agentSlug: placementMode.slug,
-      slot: placementMode.slot,
+      ...abilityFieldsFromPlacementMode(placementMode),
       x: p.x,
       y: p.y,
     };
-    setAbilities(activeStageIndex, [...activeStage.abilities, next]);
+    setAbilities(
+      activeStageIndex,
+      [...activeStage.abilities, withToggleDefault(next)],
+    );
     setPlacementMode(null);
     setAbilityDirPreview(null);
     setSelectedId(null);
@@ -934,6 +985,7 @@ export function StratStageEditor({
           agentsCatalog,
           placementMode.slug,
           placementMode.slot,
+          placementMode.abilityBlueprintId,
         )?.color ??
         (agentsCatalog.find((a) => a.slug === placementMode.slug)?.theme_color ??
           "rgb(34,211,238)"))
@@ -945,6 +997,7 @@ export function StratStageEditor({
       agentsCatalog,
       placementMode.slug,
       placementMode.slot,
+      placementMode.abilityBlueprintId,
     );
     if (!b) return false;
     if (placementMode.pendingOriginAttack) return true;
@@ -974,27 +1027,31 @@ export function StratStageEditor({
     }
     const r = roster.find((x) => x.slug === placementMode.slug);
     const who = r?.name ?? placementMode.slug;
-    const slot = placementMode.slot.toUpperCase();
-    if (placementMode.pendingOriginAttack) {
-      return `Placing ${who} ${slot} — click the map to set facing.`;
-    }
     const b = agentBlueprintForSlot(
       agentsCatalog,
       placementMode.slug,
       placementMode.slot,
+      placementMode.abilityBlueprintId,
     );
+    const slotLabel =
+      placementMode.slot === "custom"
+        ? (b?.name ?? "utility")
+        : placementMode.slot.toUpperCase();
+    if (placementMode.pendingOriginAttack) {
+      return `Placing ${who} ${slotLabel} — click the map to set facing.`;
+    }
     if (b && effectiveStratAttachToAgent(b)) {
       const m = effectiveStratPlacementMode(b);
       if (m === "origin_direction") {
-        return `Placing ${who} ${slot} — click the map to aim from the agent token.`;
+        return `Placing ${who} ${slotLabel} — click the map to aim from the agent token.`;
       }
-      return `Placing ${who} ${slot} — click the map to drop on the agent.`;
+      return `Placing ${who} ${slotLabel} — click the map to drop on the agent.`;
     }
     const m = b ? effectiveStratPlacementMode(b) : "center";
     if (m === "origin_direction") {
-      return `Placing ${who} ${slot} — click the map for origin, then again for direction.`;
+      return `Placing ${who} ${slotLabel} — click the map for origin, then again for direction.`;
     }
-    return `Placing ${who} ${slot} — click the map to place.`;
+    return `Placing ${who} ${slotLabel} — click the map to place.`;
   }, [activeStage, placementMode, roster, agentsCatalog]);
 
   const selectedAgentId =
@@ -1287,11 +1344,24 @@ export function StratStageEditor({
           stPos,
         );
         const isAttached = Boolean(ab.attachedToAgentId);
-        const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
+        const bp = agentBlueprintForSlot(
+          agentsCatalog,
+          ab.agentSlug,
+          ab.slot,
+          ab.abilityBlueprintId,
+        );
         const useTwoHandles =
           bp != null && effectiveStratPlacementMode(bp) === "origin_direction";
         const showRotationHandle = useTwoHandles && bp?.shapeKind !== "circle";
         const isRicochetHandles = useTwoHandles && bp?.shapeKind === "ricochet";
+        const isToggleableRay =
+          bp?.shapeKind === "ray" &&
+          bp.geometry.kind === "ray" &&
+          bp.geometry.toggleable === true;
+        const legacyRayStartsDown =
+          bp?.shapeKind === "ray" &&
+          bp.geometry.kind === "ray" &&
+          (bp.geometry as { wallState?: "up" | "down" }).wallState === "down";
         const stratOv = bp ? stratAnchorOverrideForBlueprint(bp) : undefined;
         const isRectOD =
           useTwoHandles &&
@@ -1341,6 +1411,33 @@ export function StratStageEditor({
           ) * pinS;
         const rotateHandleHalf = Math.max(vbWidth * 0.0058, 3.1) * pinS;
         const rotateHandleSize = rotateHandleHalf * 2;
+        const rayToggleDisplayPos =
+          isToggleableRay && bp && bp.geometry.kind === "ray"
+            ? blueprintPointToStratMapDisplay(
+                bp.geometry.curve
+                  ? {
+                      x:
+                        0.25 * bp.geometry.x1 +
+                        0.5 * bp.geometry.curve.cx +
+                        0.25 * bp.geometry.x2,
+                      y:
+                        0.25 * bp.geometry.y1 +
+                        0.5 * bp.geometry.curve.cy +
+                        0.25 * bp.geometry.y2,
+                    }
+                  : {
+                      x: (bp.geometry.x1 + bp.geometry.x2) / 2,
+                      y: (bp.geometry.y1 + bp.geometry.y2) / 2,
+                    },
+                bp,
+                pos.x,
+                pos.y,
+                vbWidth,
+                ab.rotationDeg ?? 0,
+                stratOv,
+              )
+            : null;
+        const rayToggleOn = ab.toggledOn ?? !legacyRayStartsDown;
 
         const abilitySvg = bp ? (
           <StratAbilityBlueprintSvg
@@ -1349,6 +1446,7 @@ export function StratStageEditor({
             mapY={pos.y}
             vbWidth={vbWidth}
             rotationDeg={ab.rotationDeg ?? 0}
+            rayToggledOn={rayToggleOn}
             selected={sel}
             stratAnchorOverride={stratOv}
             mapPinScale={mapPinScale}
@@ -1387,7 +1485,7 @@ export function StratStageEditor({
                 pointerEvents: "none",
               }}
             >
-              {abilitySlotLabel(ab.slot)}
+              {placedAbilityPinLabel(ab, bp)}
             </text>
           </g>
         );
@@ -1481,6 +1579,52 @@ export function StratStageEditor({
                       }}
                     />
                   ) : null}
+                  {isToggleableRay && rayToggleDisplayPos ? (
+                    <g
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (placementMode) return;
+                        setSelectedId(ab.id);
+                        focusMapSvg();
+                        setAbilities(
+                          activeStageIndex,
+                          activeStage.abilities.map((a) =>
+                            a.id === ab.id
+                              ? { ...a, toggledOn: !rayToggleOn }
+                              : a,
+                          ),
+                        );
+                      }}
+                      style={{
+                        cursor: placementMode ? "default" : "pointer",
+                        touchAction: "none",
+                      }}
+                    >
+                      <circle
+                        cx={rayToggleDisplayPos.x}
+                        cy={rayToggleDisplayPos.y}
+                        r={Math.max(vbWidth * 0.011, 5.2) * pinS}
+                        fill={rayToggleOn ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"}
+                        stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                        strokeWidth={Math.max(vbWidth * 0.0022, 1.1) * pinS}
+                      />
+                      <text
+                        x={rayToggleDisplayPos.x}
+                        y={rayToggleDisplayPos.y + Math.max(vbWidth * 0.0012, 0.55)}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill="#f8fafc"
+                        style={{
+                          fontSize: Math.max(vbWidth * 0.008, 4.9) * pinS,
+                          fontFamily: "system-ui, sans-serif",
+                          fontWeight: 800,
+                          pointerEvents: "none",
+                        }}
+                      >
+                        {rayToggleOn ? "ON" : "OFF"}
+                      </text>
+                    </g>
+                  ) : null}
                 </>
               ) : null}
             </g>
@@ -1514,6 +1658,52 @@ export function StratStageEditor({
             }}
           >
             {abilitySvg}
+            {sel && isToggleableRay && rayToggleDisplayPos ? (
+              <g
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  if (placementMode) return;
+                  setSelectedId(ab.id);
+                  focusMapSvg();
+                  setAbilities(
+                    activeStageIndex,
+                    activeStage.abilities.map((a) =>
+                      a.id === ab.id
+                        ? { ...a, toggledOn: !rayToggleOn }
+                        : a,
+                    ),
+                  );
+                }}
+                style={{
+                  cursor: placementMode ? "default" : "pointer",
+                  touchAction: "none",
+                }}
+              >
+                <circle
+                  cx={rayToggleDisplayPos.x}
+                  cy={rayToggleDisplayPos.y}
+                  r={Math.max(vbWidth * 0.011, 5.2) * pinS}
+                  fill={rayToggleOn ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"}
+                  stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                  strokeWidth={Math.max(vbWidth * 0.0022, 1.1) * pinS}
+                />
+                <text
+                  x={rayToggleDisplayPos.x}
+                  y={rayToggleDisplayPos.y + Math.max(vbWidth * 0.0012, 0.55)}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="#f8fafc"
+                  style={{
+                    fontSize: Math.max(vbWidth * 0.008, 4.9) * pinS,
+                    fontFamily: "system-ui, sans-serif",
+                    fontWeight: 800,
+                    pointerEvents: "none",
+                  }}
+                >
+                  {rayToggleOn ? "ON" : "OFF"}
+                </text>
+              </g>
+            ) : null}
           </g>
         );
       })}
@@ -1859,162 +2049,210 @@ export function StratStageEditor({
     activeStage ? (
       <div className="flex min-h-[min(56dvh,720px)] w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:flex-1">
         <div className="relative z-20 shrink-0 border-b border-violet-800/40 bg-slate-950/95 px-2 py-2">
-          {roster.length === 0 ? (
-            <p className="text-xs text-amber-200/85">
-              Add agents in the Details tab comp to use the portrait tray above the
-              map.
-            </p>
-          ) : (
-            <div className="flex flex-wrap items-start gap-2">
-              {roster.map((r) => {
-                const agentPlacedOnStage = activeStage.agents.some(
-                  (x) => x.agentSlug === r.slug,
-                );
-                const trayOpen = tokenTrayOpenSlug === r.slug;
-                const portraitActive =
-                  (placementMode?.kind === "agent" &&
-                    placementMode.slug === r.slug) ||
-                  (placementMode?.kind === "ability" &&
-                    placementMode.slug === r.slug);
-                return (
-                  <div key={r.slug} className="relative">
-                    <button
-                      type="button"
-                      title={r.name}
-                      onClick={() => {
-                        setTokenTrayOpenSlug((s) =>
-                          s === r.slug ? null : r.slug,
-                        );
-                        focusMapSvg();
-                      }}
-                      className={`relative block rounded-full border-2 transition ${
-                        trayOpen || portraitActive
-                          ? "border-violet-400 shadow-md shadow-violet-900/40"
-                          : "border-violet-800/50 hover:border-violet-500/70"
-                      }`}
-                    >
-                      {r.portraitUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- coach roster portraits from Valorant CDN
-                        <img
-                          src={r.portraitUrl}
-                          alt=""
-                          className="h-11 w-11 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-950/80 text-sm font-bold text-violet-100">
-                          {r.name.slice(0, 1)}
-                        </div>
-                      )}
-                    </button>
-                    {trayOpen ? (
-                      <div className="absolute left-0 top-[calc(100%+6px)] z-30 min-w-[220px] max-w-[min(320px,92vw)] rounded-xl border border-violet-700/50 bg-slate-950 px-2 py-2 shadow-2xl shadow-violet-950/50">
-                        <p className="mb-1.5 text-[10px] font-medium text-violet-400/90">
-                          {r.name}
-                        </p>
-                        <button
-                          type="button"
-                          disabled={agentPlacedOnStage}
-                          title={
-                            agentPlacedOnStage
-                              ? "This agent is already on this stage"
-                              : "Then click the map to drop the token"
-                          }
-                          onClick={() => {
-                            setPlacementMode((m) =>
-                              m?.kind === "agent" && m.slug === r.slug
-                                ? null
-                                : { kind: "agent", slug: r.slug },
-                            );
-                            focusMapSvg();
-                          }}
-                          className={`w-full rounded-lg border px-2 py-1.5 text-left text-xs font-medium ${
-                            placementMode?.kind === "agent" &&
-                            placementMode.slug === r.slug
-                              ? "border-violet-400 bg-violet-950/60 text-white"
-                              : "border-violet-800/45 bg-slate-950/60 text-violet-200 hover:border-violet-600/50"
-                          } disabled:cursor-not-allowed disabled:opacity-45`}
-                        >
-                          Place agent token
-                        </button>
-                        <div className="mt-2 flex flex-wrap gap-1 border-t border-violet-800/35 pt-2">
-                          {r.allowedAbilitySlots.map((slot) => {
-                            const vm = abilityMetaForSlot(
-                              valorantAbilityUi,
-                              r.slug,
-                              slot,
-                            );
-                            const bpChip = agentBlueprintForSlot(
-                              agentsCatalog,
-                              r.slug,
-                              slot,
-                            );
-                            const attachNeedsToken =
-                              bpChip != null &&
-                              effectiveStratAttachToAgent(bpChip) &&
-                              !agentPlacedOnStage;
-                            const title = attachNeedsToken
-                              ? `Place ${r.name} on the map first — this ability attaches to the agent token.`
-                              : vm
-                                ? `${vm.displayName}\n\n${vm.description}`
-                                : `Place ${slot.toUpperCase()} for ${r.name}`;
-                            return (
-                              <button
-                                key={slot}
-                                type="button"
-                                disabled={attachNeedsToken}
-                                title={title}
-                                onClick={() => {
-                                  setPlacementMode((m) =>
-                                    m?.kind === "ability" &&
-                                    m.slug === r.slug &&
-                                    m.slot === slot
-                                      ? null
-                                      : { kind: "ability", slug: r.slug, slot },
-                                  );
-                                  focusMapSvg();
-                                }}
-                                className={`flex min-h-9 min-w-13 max-w-30 flex-col items-center justify-center rounded border px-1 py-0.5 text-left leading-tight transition ${
-                                  placementMode?.kind === "ability" &&
-                                  placementMode.slug === r.slug &&
-                                  placementMode.slot === slot
-                                    ? "border-cyan-400 bg-cyan-950/50 text-white"
-                                    : "border-violet-800/50 bg-slate-950/70 text-violet-200"
-                                } disabled:cursor-not-allowed disabled:opacity-45`}
-                              >
-                                <span className="text-[11px] font-bold">
-                                  {slot.toUpperCase()}
-                                </span>
-                                {vm ? (
-                                  <span className="line-clamp-2 w-full text-center text-[9px] font-normal text-violet-300/85">
-                                    {vm.displayName}
-                                  </span>
-                                ) : null}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {placementMode ? (
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            {roster.length === 0 ? (
+              <p className="text-xs text-amber-200/85">
+                Add agents in the Details tab comp to use the portrait tray above the
+                map.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-start gap-2">
+                {roster.map((r) => {
+                  const agentPlacedOnStage = activeStage.agents.some(
+                    (x) => x.agentSlug === r.slug,
+                  );
+                  const trayOpen = tokenTrayOpenSlug === r.slug;
+                  const portraitActive =
+                    (placementMode?.kind === "agent" &&
+                      placementMode.slug === r.slug) ||
+                    (placementMode?.kind === "ability" &&
+                      placementMode.slug === r.slug);
+                  return (
+                    <div key={r.slug} className="relative">
+                      <button
+                        type="button"
+                        title={r.name}
+                        onClick={() => {
+                          setTokenTrayOpenSlug((s) =>
+                            s === r.slug ? null : r.slug,
+                          );
+                          focusMapSvg();
+                        }}
+                        className={`relative block rounded-full border-2 transition ${
+                          trayOpen || portraitActive
+                            ? "border-violet-400 shadow-md shadow-violet-900/40"
+                            : "border-violet-800/50 hover:border-violet-500/70"
+                        }`}
+                      >
+                        {r.portraitUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element -- coach roster portraits from Valorant CDN
+                          <img
+                            src={r.portraitUrl}
+                            alt=""
+                            className="h-11 w-11 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-950/80 text-sm font-bold text-violet-100">
+                            {r.name.slice(0, 1)}
+                          </div>
+                        )}
+                      </button>
+                      {trayOpen ? (
+                        <div className="absolute left-0 top-[calc(100%+6px)] z-30 min-w-[220px] max-w-[min(320px,92vw)] rounded-xl border border-violet-700/50 bg-slate-950 px-2 py-2 shadow-2xl shadow-violet-950/50">
+                          <p className="mb-1.5 text-[10px] font-medium text-violet-400/90">
+                            {r.name}
+                          </p>
                           <button
                             type="button"
-                            className="mt-2 w-full text-center text-[10px] text-violet-400 underline hover:text-violet-200"
+                            disabled={agentPlacedOnStage}
+                            title={
+                              agentPlacedOnStage
+                                ? "This agent is already on this stage"
+                                : "Then click the map to drop the token"
+                            }
                             onClick={() => {
-                              setPlacementMode(null);
-                              setAbilityDirPreview(null);
+                              setPlacementMode((m) =>
+                                m?.kind === "agent" && m.slug === r.slug
+                                  ? null
+                                  : { kind: "agent", slug: r.slug },
+                              );
+                              focusMapSvg();
                             }}
+                            className={`w-full rounded-lg border px-2 py-1.5 text-left text-xs font-medium ${
+                              placementMode?.kind === "agent" &&
+                              placementMode.slug === r.slug
+                                ? "border-violet-400 bg-violet-950/60 text-white"
+                                : "border-violet-800/45 bg-slate-950/60 text-violet-200 hover:border-violet-600/50"
+                            } disabled:cursor-not-allowed disabled:opacity-45`}
                           >
-                            Cancel placement
+                            Place agent token
                           </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                          <div className="mt-2 flex flex-wrap gap-1 border-t border-violet-800/35 pt-2">
+                            {r.abilityPlacementOptions.map((opt) => {
+                              const slotForLookup: StratPlacedAbility["slot"] =
+                                opt.kind === "key" ? opt.slot : "custom";
+                              const vm =
+                                opt.kind === "key"
+                                  ? abilityMetaForSlot(
+                                      valorantAbilityUi,
+                                      r.slug,
+                                      opt.slot,
+                                    )
+                                  : undefined;
+                              const bpChip = agentBlueprintForSlot(
+                                agentsCatalog,
+                                r.slug,
+                                slotForLookup,
+                                opt.kind === "custom" ? opt.blueprintId : undefined,
+                              );
+                              const attachNeedsToken =
+                                bpChip != null &&
+                                effectiveStratAttachToAgent(bpChip) &&
+                                !agentPlacedOnStage;
+                              const title = attachNeedsToken
+                                ? `Place ${r.name} on the map first — this ability attaches to the agent token.`
+                                : opt.kind === "custom"
+                                  ? `Place ${opt.name} (${r.name})`
+                                  : vm
+                                    ? `${vm.displayName}\n\n${vm.description}`
+                                    : `Place ${opt.slot.toUpperCase()} for ${r.name}`;
+                              const chipKey =
+                                opt.kind === "key"
+                                  ? opt.slot
+                                  : `c-${opt.blueprintId}`;
+                              const active = isActiveAbilityPlacementOption(
+                                placementMode,
+                                r.slug,
+                                opt,
+                              );
+                              return (
+                                <button
+                                  key={chipKey}
+                                  type="button"
+                                  disabled={attachNeedsToken}
+                                  title={title}
+                                  onClick={() => {
+                                    setPlacementMode((m) =>
+                                      isActiveAbilityPlacementOption(m, r.slug, opt)
+                                        ? null
+                                        : {
+                                            kind: "ability",
+                                            slug: r.slug,
+                                            slot:
+                                              opt.kind === "key"
+                                                ? opt.slot
+                                                : "custom",
+                                            abilityBlueprintId:
+                                              opt.kind === "custom"
+                                                ? opt.blueprintId
+                                                : undefined,
+                                          },
+                                    );
+                                    focusMapSvg();
+                                  }}
+                                  className={`flex min-h-9 min-w-13 max-w-30 flex-col items-center justify-center rounded border px-1 py-0.5 text-left leading-tight transition ${
+                                    active
+                                      ? "border-cyan-400 bg-cyan-950/50 text-white"
+                                      : "border-violet-800/50 bg-slate-950/70 text-violet-200"
+                                  } disabled:cursor-not-allowed disabled:opacity-45`}
+                                >
+                                  <span className="text-[11px] font-bold">
+                                    {opt.kind === "key"
+                                      ? opt.slot.toUpperCase()
+                                      : "★"}
+                                  </span>
+                                  {opt.kind === "custom" ? (
+                                    <span className="line-clamp-2 w-full text-center text-[9px] font-normal text-violet-300/85">
+                                      {opt.name}
+                                    </span>
+                                  ) : vm ? (
+                                    <span className="line-clamp-2 w-full text-center text-[9px] font-normal text-violet-300/85">
+                                      {vm.displayName}
+                                    </span>
+                                  ) : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {placementMode ? (
+                            <button
+                              type="button"
+                              className="mt-2 w-full text-center text-[10px] text-violet-400 underline hover:text-violet-200"
+                              onClick={() => {
+                                setPlacementMode(null);
+                                setAbilityDirPreview(null);
+                              }}
+                            >
+                              Cancel placement
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setMapLayersModalOpen(true)}
+                className="rounded-md border border-violet-700/55 bg-slate-950/80 px-3 py-1.5 text-xs font-medium text-violet-100/90 hover:border-violet-500/60 hover:bg-violet-950/45"
+              >
+                Map filters
+              </button>
+              <p className="text-xs text-violet-400/80">
+                Layer controls open in a modal
+              </p>
+              <button
+                type="button"
+                onClick={() => setMapResetZoomSignal((n) => n + 1)}
+                className="rounded-md border border-violet-700/50 bg-slate-950/80 px-2 py-1 text-xs font-medium text-violet-200 hover:border-violet-500/50 hover:bg-violet-950/50"
+              >
+                Reset zoom
+              </button>
             </div>
-          )}
-          <p className="mt-2 text-[11px] leading-snug text-violet-200/95">
-            {mapPlacementStatusText}
-          </p>
+          </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col">
           <StratMapViewer
@@ -2022,8 +2260,12 @@ export function StratStageEditor({
             gameMap={gameMap}
             side={editorFrameSide}
             rotateView180={rotateView180}
-            showLayerToggles
+            showLayerToggles={false}
             showFooter={false}
+            showInlineResetZoom={false}
+            layerModalOpen={mapLayersModalOpen}
+            onLayerModalOpenChange={setMapLayersModalOpen}
+            resetZoomSignal={mapResetZoomSignal}
             embed
             initialVisibility={activeStage.mapLayerVisibility}
             visibilityScopeKey={activeStage.id}
@@ -2034,6 +2276,11 @@ export function StratStageEditor({
           >
             {overlay}
           </StratMapViewer>
+        </div>
+        <div className="mt-2 shrink-0 rounded-lg border border-violet-800/40 bg-slate-950/55 px-3 py-2.5">
+          <p className="text-sm font-medium leading-snug text-violet-100/95">
+            {mapPlacementStatusText}
+          </p>
         </div>
         {stageSelectorUnderMap}
         {agentVisionContextMenu ? (

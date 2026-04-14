@@ -9,9 +9,7 @@ import {
   StratStageAgentTokens,
   type StratAgentTokenTransition,
 } from "@/components/StratStageAgentTokens";
-import {
-  abilitySlotLabel,
-} from "@/lib/strat-stage-pin-styles";
+import { placedAbilityPinLabel } from "@/lib/strat-stage-pin-styles";
 import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
 import { StratAbilityBlueprintSvg } from "@/components/StratAbilityBlueprintSvg";
 import {
@@ -217,8 +215,18 @@ export function StratStagePinsReadonly({
           x: st.x,
           y: st.y,
         });
-        const bp = agentBlueprintForSlot(agentsCatalog, ab.agentSlug, ab.slot);
+        const bp = agentBlueprintForSlot(
+          agentsCatalog,
+          ab.agentSlug,
+          ab.slot,
+          ab.abilityBlueprintId,
+        );
         const stratOv = bp ? stratAnchorOverrideForBlueprint(bp) : undefined;
+        const legacyRayStartsDown =
+          bp?.shapeKind === "ray" &&
+          bp.geometry.kind === "ray" &&
+          (bp.geometry as { wallState?: "up" | "down" }).wallState === "down";
+        const rayToggleOn = ab.toggledOn ?? !legacyRayStartsDown;
 
         return (
           <g key={ab.id}>
@@ -229,6 +237,7 @@ export function StratStagePinsReadonly({
                 mapY={pos.y}
                 vbWidth={vbWidth}
                 rotationDeg={ab.rotationDeg ?? 0}
+                rayToggledOn={rayToggleOn}
                 pointerEvents="none"
                 stratAnchorOverride={stratOv}
                 mapPinScale={pinScale}
@@ -263,7 +272,7 @@ export function StratStagePinsReadonly({
                     fontWeight: 800,
                   }}
                 >
-                  {abilitySlotLabel(ab.slot)}
+                  {placedAbilityPinLabel(ab, bp)}
                 </text>
               </g>
             )}

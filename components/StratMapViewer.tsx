@@ -375,6 +375,14 @@ export type StratMapViewerProps = {
   visibilityScopeKey?: string;
   /** Per-stage door open/closed; affects map drawing and vision LOS when used with strat data. */
   doorOpenByOverlayId?: Record<string, boolean>;
+  /** Controlled map-filters modal visibility (optional). */
+  layerModalOpen?: boolean;
+  /** Controlled map-filters modal setter (optional). */
+  onLayerModalOpenChange?: (open: boolean) => void;
+  /** Increment to trigger an external reset zoom action. */
+  resetZoomSignal?: number;
+  /** Show/hide the built-in reset zoom button below the map. */
+  showInlineResetZoom?: boolean;
 };
 
 export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
@@ -391,6 +399,10 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
       onVisibilityChange,
       visibilityScopeKey,
       doorOpenByOverlayId,
+      layerModalOpen,
+      onLayerModalOpenChange,
+      resetZoomSignal,
+      showInlineResetZoom = true,
     },
     ref,
   ) {
@@ -410,7 +422,17 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
   /** Zoom/pan window in SVG user units (editor-style; not persisted). */
   const [viewport, setViewport] = useState<ViewBoxRect | null>(null);
   const [rightPanning, setRightPanning] = useState(false);
-  const [layersModalOpen, setLayersModalOpen] = useState(false);
+  const [layersModalOpenInternal, setLayersModalOpenInternal] = useState(false);
+  const layersModalOpen = layerModalOpen ?? layersModalOpenInternal;
+  const setLayersModalOpen = useCallback(
+    (open: boolean) => {
+      if (layerModalOpen == null) {
+        setLayersModalOpenInternal(open);
+      }
+      onLayerModalOpenChange?.(open);
+    },
+    [layerModalOpen, onLayerModalOpenChange],
+  );
 
   const setSvgRef = useCallback(
     (node: SVGSVGElement | null) => {
@@ -465,11 +487,6 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
   }, [initialVisibility, visibilityScopeKey]);
 
   useEffect(() => {
-    if (showLayerToggles) return;
-    setLayersModalOpen(false);
-  }, [showLayerToggles]);
-
-  useEffect(() => {
     if (!layersModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLayersModalOpen(false);
@@ -477,6 +494,11 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [layersModalOpen]);
+
+  useEffect(() => {
+    if (resetZoomSignal == null) return;
+    setViewport(null);
+  }, [resetZoomSignal]);
 
   useEffect(() => {
     const el = svgRef.current;
@@ -651,7 +673,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
         </div>
       ) : null}
 
-      {showLayerToggles && layersModalOpen ? (
+      {layersModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
@@ -990,7 +1012,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
             </a>
             .
           </p>
-          {viewport ? (
+          {showInlineResetZoom && viewport ? (
             <button
               type="button"
               onClick={() => setViewport(null)}
@@ -1000,7 +1022,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
             </button>
           ) : null}
         </div>
-      ) : viewport ? (
+      ) : showInlineResetZoom && viewport ? (
         <div className="flex justify-end">
           <button
             type="button"

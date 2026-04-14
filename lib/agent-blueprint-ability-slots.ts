@@ -1,16 +1,51 @@
 import type { AgentAbilityBlueprint } from "@/types/agent-ability";
 import type { StratPlacedAbility } from "@/types/strat";
 
-const ALL_SLOTS: StratPlacedAbility["slot"][] = ["q", "e", "c", "x"];
+const ALL_KEY_SLOTS: ("q" | "e" | "c" | "x")[] = ["q", "e", "c", "x"];
+
+/** One row in the strat “place ability” tray: a key binding or a custom-named blueprint. */
+export type AbilityPlacementOption =
+  | { kind: "key"; slot: "q" | "e" | "c" | "x" }
+  | { kind: "custom"; blueprintId: string; name: string };
 
 /**
- * Ability chips on the strat map must match coach-defined blueprints when present.
- * If the blueprint is empty, all four slots are available (until blueprints are drawn).
+ * Build placement chips from coach blueprints. Empty blueprint → all four keys (legacy).
+ * Custom rows (`slot: custom`) each get their own chip keyed by `blueprintId`.
+ */
+export function abilityPlacementOptionsFromBlueprint(
+  blueprint: AgentAbilityBlueprint[] | null | undefined,
+): AbilityPlacementOption[] {
+  if (!blueprint || blueprint.length === 0) {
+    return ALL_KEY_SLOTS.map((slot) => ({ kind: "key", slot }));
+  }
+  const out: AbilityPlacementOption[] = [];
+  const seenKey = new Set<string>();
+  for (const b of blueprint) {
+    if (b.slot === "custom") {
+      out.push({ kind: "custom", blueprintId: b.id, name: b.name });
+    } else if (
+      b.slot === "q" ||
+      b.slot === "e" ||
+      b.slot === "c" ||
+      b.slot === "x"
+    ) {
+      if (!seenKey.has(b.slot)) {
+        seenKey.add(b.slot);
+        out.push({ kind: "key", slot: b.slot });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * @deprecated Prefer {@link abilityPlacementOptionsFromBlueprint} — multiple custom
+ * abilities cannot be represented as slot keys alone.
  */
 export function allowedAbilitySlotsFromBlueprint(
   blueprint: AgentAbilityBlueprint[] | null | undefined,
 ): StratPlacedAbility["slot"][] {
-  if (!blueprint || blueprint.length === 0) return [...ALL_SLOTS];
-  const set = new Set(blueprint.map((b) => b.slot));
-  return ALL_SLOTS.filter((s) => set.has(s));
+  return abilityPlacementOptionsFromBlueprint(blueprint).map((o) =>
+    o.kind === "key" ? o.slot : "custom",
+  );
 }

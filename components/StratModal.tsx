@@ -19,6 +19,7 @@ import {
   fetchValorantAbilityUiBySlug,
   type ValorantAbilityUiMeta,
 } from "@/lib/valorant-api-abilities";
+import { agentBlueprintForSlot } from "@/lib/strat-ability-blueprint-lookup";
 import {
   X,
   ChevronLeft,
@@ -104,14 +105,25 @@ export function StratModal({
     if (!activeStage) return [];
     return activeStage.abilities.map((ab) => {
       const meta = abilityMetaForSlot(abilityMetaBySlug, ab.agentSlug, ab.slot);
+      const bp = agentBlueprintForSlot(
+        agentsCatalog,
+        ab.agentSlug,
+        ab.slot,
+        ab.abilityBlueprintId,
+      );
       const agentName =
         agentsCatalog.find((a) => a.slug === ab.agentSlug)?.name ?? ab.agentSlug;
+      const displayName =
+        bp?.name ?? meta?.displayName ?? ab.slot.toUpperCase();
       return {
         id: ab.id,
         agentSlug: ab.agentSlug,
         agentName,
-        slot: ab.slot.toUpperCase(),
-        name: meta?.displayName ?? ab.slot.toUpperCase(),
+        slot:
+          ab.slot === "custom"
+            ? displayName
+            : ab.slot.toUpperCase(),
+        name: displayName,
       };
     });
   }, [activeStage, abilityMetaBySlug, agentsCatalog]);

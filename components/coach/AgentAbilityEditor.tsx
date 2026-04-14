@@ -24,10 +24,12 @@ import {
 } from "@/lib/valorant-api-abilities";
 import {
   BLUEPRINT_CANVAS_SIZE,
+  BLUEPRINT_EDITOR_COORD_MAX,
   BLUEPRINT_GEOMETRY_LENGTH_MAX,
   blueprintStratSizingReadout,
   STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO,
 } from "@/lib/agent-ability-blueprint-scale";
+import { blueprintGeometryBounds } from "@/lib/strat-ability-blueprint-bounds";
 import type { GameMap } from "@/types/catalog";
 import { AbilityBlueprintMapPreview } from "@/components/coach/AbilityBlueprintMapPreview";
 import { BlueprintGeometryFields } from "@/components/coach/BlueprintGeometryFields";
@@ -35,7 +37,9 @@ import { BlueprintPlacementPreview } from "@/components/coach/BlueprintPlacement
 import { BlueprintShapeHandles } from "@/components/coach/BlueprintShapeHandles";
 import {
   clampBlueprintPoint,
+  clampBlueprintPointExtended,
   snapBlueprintPoint,
+  snapBlueprintPointExtended,
 } from "@/lib/blueprint-canvas-snap";
 import { viewBoxRectFromMap } from "@/lib/strat-map-display";
 import {
@@ -51,15 +55,17 @@ import { normalizeAgentThemeColor } from "@/lib/agent-theme-color";
 import { shapeSupportsVisionObstructionModes } from "@/lib/ability-vision-blockers";
 
 const VB = BLUEPRINT_CANVAS_SIZE;
-const VB_STR = `0 0 ${VB} ${VB}`;
 
-const SLOT_VALUES: AgentAbilitySlot[] = ["q", "e", "c", "x"];
+const SLOT_VALUES: AgentAbilitySlot[] = ["q", "e", "c", "x", "custom"];
 
 function slotSelectLabel(
   bySlug: Record<string, ValorantAbilityUiMeta[]> | null,
   agentSlug: string,
   slot: AgentAbilitySlot,
 ): string {
+  if (slot === "custom") {
+    return "Custom — no key (stars, passives, extra kit)";
+  }
   const meta = bySlug ? abilityMetaForSlot(bySlug, agentSlug, slot) : undefined;
   const key = slot.toUpperCase();
   if (meta?.displayName) return `${meta.displayName} (${key})`;
@@ -71,6 +77,7 @@ function slotCompactLabel(
   agentSlug: string,
   slot: AgentAbilitySlot,
 ): string {
+  if (slot === "custom") return "Custom";
   const meta = bySlug ? abilityMetaForSlot(bySlug, agentSlug, slot) : undefined;
   return meta?.displayName ?? slot.toUpperCase();
 }
@@ -135,13 +142,13 @@ function buildGeometry(
     };
   }
   if (kind === "ray" && pts.length >= 2) {
-    const a = pts[0]!;
-    const b = pts[1]!;
+    const a = clampBlueprintPointExtended(pts[0]!);
+    const b = clampBlueprintPointExtended(pts[1]!);
     return { kind: "ray", x1: a.x, y1: a.y, x2: b.x, y2: b.y };
   }
   if (kind === "movement" && pts.length >= 2) {
-    const a = pts[0]!;
-    const b = pts[1]!;
+    const a = clampBlueprintPoint(pts[0]!);
+    const b = clampBlueprintPointExtended(pts[1]!);
     return {
       kind: "movement",
       ax: a.x,
@@ -266,6 +273,7 @@ function PointBlueprintEditorPreview({
   displayIconUrl,
   iconScale = 1,
   dimmed,
+  vbExtent = VB,
 }: {
   x: number;
   y: number;
@@ -273,12 +281,14 @@ function PointBlueprintEditorPreview({
   displayIconUrl?: string | null;
   iconScale?: number;
   dimmed?: boolean;
+  /** Matches SVG viewBox width/height when the editor canvas is expanded. */
+  vbExtent?: number;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const sw = VB * 0.004;
+  const sw = vbExtent * 0.004;
   const op = dimmed ? 0.35 : 0.95;
   const scale = Math.min(3, Math.max(0.12, iconScale));
-  const size = VB * 0.038 * scale;
+  const size = vbExtent * 0.038 * scale;
   const half = size / 2;
   const showImg =
     typeof displayIconUrl === "string" &&
@@ -319,7 +329,7 @@ function PointBlueprintEditorPreview({
         <circle
           cx={x}
           cy={y}
-          r={VB * 0.018 * scale}
+          r={vbExtent * 0.018 * scale}
           fill={stroke}
           stroke="#fff"
           strokeWidth={sw}
@@ -333,11 +343,13 @@ function AbilityShapePreview({
   b,
   dimmed,
   displayIconUrl,
+  vbExtent = VB,
 }: {
   b: AgentAbilityBlueprint;
   dimmed?: boolean;
   /** Valorant API `displayIcon` for point shapes. */
   displayIconUrl?: string | null;
+  vbExtent?: number;
 }) {
   const g = b.geometry;
   const stroke = b.color;
@@ -348,7 +360,7 @@ function AbilityShapePreview({
     b.textureId && b.textureId !== "solid"
       ? `url(#${texturePatternId})`
       : fill;
-  const sw = VB * 0.004;
+  const sw = vbExtent * 0.004;
   const op = dimmed ? 0.35 : 0.95;
 
   switch (g.kind) {
@@ -363,6 +375,7 @@ function AbilityShapePreview({
           }
           iconScale={b.pointIconScale ?? 1}
           dimmed={dimmed}
+          vbExtent={vbExtent}
         />
       );
     case "circle":
@@ -388,22 +401,24 @@ function AbilityShapePreview({
       );
     case "ray":
       {
-        const wallOpacity = g.wallState === "down" ? op * 0.42 : op;
-        const wallDash =
-          g.wallState === "down" ? `${VB * 0.012} ${VB * 0.012}` : undefined;
+        const strokeMul =
+          typeof g.strokeWidthMul === "number" &&
+          Number.isFinite(g.strokeWidthMul) &&
+          g.strokeWidthMul > 0
+            ? Math.min(8, Math.max(0.2, g.strokeWidthMul))
+            : 1;
         const d = g.curve
           ? `M ${g.x1} ${g.y1} Q ${g.curve.cx} ${g.curve.cy} ${g.x2} ${g.y2}`
           : `M ${g.x1} ${g.y1} L ${g.x2} ${g.y2}`;
         return (
-          <g opacity={wallOpacity}>
+          <g opacity={op}>
             <path
               d={d}
               fill="none"
               stroke={stroke}
-              strokeWidth={sw * 1.8}
+              strokeWidth={sw * 1.8 * strokeMul}
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeDasharray={wallDash}
             />
           </g>
         );
@@ -522,13 +537,20 @@ function AbilityShapePreview({
             stroke={stroke}
             strokeWidth={sw * 2}
             strokeLinecap="round"
-            strokeDasharray={`${VB * 0.02} ${VB * 0.014}`}
+            strokeDasharray={`${vbExtent * 0.02} ${vbExtent * 0.014}`}
           />
-          <circle cx={m.ax} cy={m.ay} r={VB * 0.014} fill={stroke} stroke="#fff" strokeWidth={sw} />
+          <circle
+            cx={m.ax}
+            cy={m.ay}
+            r={vbExtent * 0.014}
+            fill={stroke}
+            stroke="#fff"
+            strokeWidth={sw}
+          />
           <circle
             cx={m.bx}
             cy={m.by}
-            r={VB * 0.011}
+            r={vbExtent * 0.011}
             fill={textureFill}
             stroke={stroke}
             strokeWidth={sw * 0.85}
@@ -556,13 +578,20 @@ function AbilityShapePreview({
             stroke={stroke}
             strokeWidth={sw * 2}
             strokeLinecap="round"
-            strokeDasharray={`${VB * 0.02} ${VB * 0.014}`}
+            strokeDasharray={`${vbExtent * 0.02} ${vbExtent * 0.014}`}
           />
-          <circle cx={m.ax} cy={m.ay} r={VB * 0.014} fill={stroke} stroke="#fff" strokeWidth={sw} />
+          <circle
+            cx={m.ax}
+            cy={m.ay}
+            r={vbExtent * 0.014}
+            fill={stroke}
+            stroke="#fff"
+            strokeWidth={sw}
+          />
           <circle
             cx={m.bx}
             cy={m.by}
-            r={VB * 0.011}
+            r={vbExtent * 0.011}
             fill={textureFill}
             stroke={stroke}
             strokeWidth={sw * 0.85}
@@ -778,15 +807,61 @@ export function AgentAbilityEditor({
   const [snapStep, setSnapStep] = useState<number>(25);
   const [cursorBp, setCursorBp] = useState<MapPoint | null>(null);
 
-  const applySnap = useCallback(
+  const blueprintSvgExtent = useMemo(() => {
+    let maxC = BLUEPRINT_CANVAS_SIZE;
+    const bumpBox = (box: {
+      minX: number;
+      minY: number;
+      maxX: number;
+      maxY: number;
+    }) => {
+      if (
+        !Number.isFinite(box.minX) ||
+        !Number.isFinite(box.maxX) ||
+        !Number.isFinite(box.minY) ||
+        !Number.isFinite(box.maxY)
+      ) {
+        return;
+      }
+      maxC = Math.max(maxC, box.minX, box.minY, box.maxX, box.maxY);
+    };
+    for (const b of abilities) {
+      bumpBox(blueprintGeometryBounds(b.geometry));
+    }
+    if (placement) {
+      for (const p of placement.points) {
+        maxC = Math.max(maxC, p.x, p.y);
+      }
+    }
+    if (cursorBp) {
+      maxC = Math.max(maxC, cursorBp.x, cursorBp.y);
+    }
+    return Math.min(
+      BLUEPRINT_EDITOR_COORD_MAX,
+      Math.max(BLUEPRINT_CANVAS_SIZE, Math.ceil(maxC / 50) * 50 + 100),
+    );
+  }, [abilities, placement, cursorBp]);
+
+  const snapBlueprintClick = useCallback(
     (p: MapPoint): MapPoint => {
-      const c = clampBlueprintPoint(p);
-      return snapStep > 0 ? snapBlueprintPoint(c, snapStep) : c;
+      if (!placement) return clampBlueprintPoint(p);
+      const idx = placement.points.length;
+      const kind = placement.shapeKind;
+      const extended =
+        kind === "ray" ||
+        (kind === "movement" && idx >= 1) ||
+        (kind === "ricochet" && idx >= 1);
+      const c = extended ? clampBlueprintPointExtended(p) : clampBlueprintPoint(p);
+      if (snapStep <= 0) return c;
+      return extended
+        ? snapBlueprintPointExtended(c, snapStep)
+        : snapBlueprintPoint(c, snapStep);
     },
-    [snapStep],
+    [placement, snapStep],
   );
 
   useEffect(() => {
+    if (draftSlot === "custom") return;
     if (!valorantUiBySlug) return;
     const meta = abilityMetaForSlot(valorantUiBySlug, agent.slug, draftSlot);
     setDraftName(meta?.displayName ?? "");
@@ -934,7 +1009,7 @@ export function AgentAbilityEditor({
       if (!placement || !svgRef.current) return;
       if (e.button !== 0) return;
       const raw = clientToSvgPoint(svgRef.current, e.clientX, e.clientY);
-      const p = applySnap({ x: raw.x, y: raw.y });
+      const p = snapBlueprintClick({ x: raw.x, y: raw.y });
       const kind = placement.shapeKind;
       const nextPts = [...placement.points, p];
 
@@ -950,7 +1025,7 @@ export function AgentAbilityEditor({
         setPlacement({ ...placement, points: nextPts });
       }
     },
-    [placement, commitPlacement, applySnap],
+    [placement, commitPlacement, snapBlueprintClick],
   );
 
   function removeAbility(id: string) {
@@ -1304,26 +1379,32 @@ export function AgentAbilityEditor({
             <div className="mx-auto w-full max-w-[min(100%,78dvh)] p-1.5">
               <svg
                 ref={svgRef}
-                viewBox={VB_STR}
+                viewBox={`0 0 ${blueprintSvgExtent} ${blueprintSvgExtent}`}
                 className="block aspect-square h-auto max-h-[76dvh] min-h-[320px] w-full cursor-crosshair touch-none select-none"
                 onClick={onSvgClick}
                 onPointerMove={(e) => {
                   if (!placement || !svgRef.current) return;
                   const raw = clientToSvgPoint(svgRef.current, e.clientX, e.clientY);
-                  setCursorBp(applySnap({ x: raw.x, y: raw.y }));
+                  setCursorBp(snapBlueprintClick({ x: raw.x, y: raw.y }));
                 }}
                 onPointerLeave={() => setCursorBp(null)}
                 role="presentation"
               >
-              <rect width={VB} height={VB} fill="rgb(15,23,42)" />
+              <rect
+                width={blueprintSvgExtent}
+                height={blueprintSvgExtent}
+                fill="rgb(15,23,42)"
+              />
               <g pointerEvents="none" opacity={0.55}>
-                {Array.from({ length: 11 }, (_, i) => (
+                {Array.from(
+                  { length: Math.floor(blueprintSvgExtent / 100) + 1 },
+                  (_, i) => (
                   <line
                     key={`gv-${i}`}
                     x1={i * 100}
                     y1={0}
                     x2={i * 100}
-                    y2={VB}
+                    y2={blueprintSvgExtent}
                     stroke={
                       i % 5 === 0
                         ? "rgba(148,163,184,0.22)"
@@ -1332,12 +1413,14 @@ export function AgentAbilityEditor({
                     strokeWidth={i % 5 === 0 ? 1.2 : 0.55}
                   />
                 ))}
-                {Array.from({ length: 11 }, (_, i) => (
+                {Array.from(
+                  { length: Math.floor(blueprintSvgExtent / 100) + 1 },
+                  (_, i) => (
                   <line
                     key={`gh-${i}`}
                     x1={0}
                     y1={i * 100}
-                    x2={VB}
+                    x2={blueprintSvgExtent}
                     y2={i * 100}
                     stroke={
                       i % 5 === 0
@@ -1349,14 +1432,19 @@ export function AgentAbilityEditor({
                 ))}
               </g>
               <text
-                x={VB / 2}
+                x={blueprintSvgExtent / 2}
                 y={36}
                 textAnchor="middle"
                 fill="rgba(148,163,184,0.55)"
-                style={{ fontSize: VB * 0.022, fontFamily: "system-ui" }}
+                style={{
+                  fontSize: blueprintSvgExtent * 0.022,
+                  fontFamily: "system-ui",
+                }}
               >
-                Blueprint space {VB}×{VB} units — major grid 100 · full canvas edge ={" "}
-                {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of map width (linear)
+                Blueprint view {blueprintSvgExtent}×{blueprintSvgExtent} (min{" "}
+                {BLUEPRINT_CANVAS_SIZE}, cap {BLUEPRINT_EDITOR_COORD_MAX}) · grid 100 ·{" "}
+                {BLUEPRINT_CANVAS_SIZE} bp reference edge ={" "}
+                {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% map width (linear)
               </text>
               {selected && !placement ? (
                 <g
@@ -1367,6 +1455,7 @@ export function AgentAbilityEditor({
                 >
                   <AbilityShapePreview
                     b={selected}
+                    vbExtent={blueprintSvgExtent}
                     displayIconUrl={
                       selected.shapeKind === "point"
                         ? abilityMetaForSlot(
@@ -1379,7 +1468,7 @@ export function AgentAbilityEditor({
                   />
                   {(() => {
                     const { x, y } = blueprintStratAnchor(selected);
-                    const w = VB * 0.024;
+                    const w = blueprintSvgExtent * 0.024;
                     const anchorColor = selected.color;
                     return (
                       <g pointerEvents="none" opacity={0.95}>
@@ -1389,7 +1478,7 @@ export function AgentAbilityEditor({
                           x2={x + w}
                           y2={y}
                           stroke={anchorColor}
-                          strokeWidth={VB * 0.003}
+                          strokeWidth={blueprintSvgExtent * 0.003}
                         />
                         <line
                           x1={x}
@@ -1397,15 +1486,15 @@ export function AgentAbilityEditor({
                           x2={x}
                           y2={y + w}
                           stroke={anchorColor}
-                          strokeWidth={VB * 0.003}
+                          strokeWidth={blueprintSvgExtent * 0.003}
                         />
                         <circle
                           cx={x}
                           cy={y}
-                          r={VB * 0.006}
+                          r={blueprintSvgExtent * 0.006}
                           fill={anchorColor}
                           stroke="rgb(15,23,42)"
-                          strokeWidth={VB * 0.0015}
+                          strokeWidth={blueprintSvgExtent * 0.0015}
                         />
                       </g>
                     );
@@ -1415,7 +1504,7 @@ export function AgentAbilityEditor({
               <BlueprintPlacementPreview
                 placement={placement}
                 cursorBp={cursorBp}
-                vb={VB}
+                vb={blueprintSvgExtent}
                 pointPreviewIconUrl={
                   placement?.shapeKind === "point"
                     ? abilityMetaForSlot(
@@ -1432,10 +1521,10 @@ export function AgentAbilityEditor({
                     key={`d-${i}`}
                     cx={p.x}
                     cy={p.y}
-                    r={VB * 0.012}
+                    r={blueprintSvgExtent * 0.012}
                     fill={rgbaWithAlpha(placement.color, 0.92)}
                     stroke={placement.color}
-                    strokeWidth={VB * 0.003}
+                    strokeWidth={blueprintSvgExtent * 0.003}
                     pointerEvents="none"
                   />
                 ))}
@@ -1446,7 +1535,7 @@ export function AgentAbilityEditor({
                     .join(" ")}
                   fill="none"
                   stroke={rgbaWithAlpha(placement.color, 0.62)}
-                  strokeWidth={VB * 0.004}
+                  strokeWidth={blueprintSvgExtent * 0.004}
                   strokeDasharray="12 8"
                   pointerEvents="none"
                 />
@@ -1456,17 +1545,17 @@ export function AgentAbilityEditor({
                   points={placement.points.map((p) => `${p.x},${p.y}`).join(" ")}
                   fill={rgbaWithAlpha(placement.color, 0.12)}
                   stroke={rgbaWithAlpha(placement.color, 0.55)}
-                  strokeWidth={VB * 0.003}
+                  strokeWidth={blueprintSvgExtent * 0.003}
                   strokeDasharray="10 6"
                   pointerEvents="none"
                 />
               ) : null}
-                {selected && !placement ? (
-                  <BlueprintShapeHandles
-                    blueprint={selected}
-                    vb={VB}
-                    svgRef={svgRef}
-                    snapStep={snapStep}
+              {selected && !placement ? (
+                <BlueprintShapeHandles
+                  blueprint={selected}
+                  vb={blueprintSvgExtent}
+                  svgRef={svgRef}
+                  snapStep={snapStep}
                   pointDisplayIconUrl={
                     selected.shapeKind === "point"
                       ? abilityMetaForSlot(
@@ -1476,9 +1565,9 @@ export function AgentAbilityEditor({
                         )?.displayIcon ?? null
                       : null
                   }
-                    onChange={updateSelectedGeometry}
-                  />
-                ) : null}
+                  onChange={updateSelectedGeometry}
+                />
+              ) : null}
               </svg>
             </div>
           </div>
@@ -1486,7 +1575,14 @@ export function AgentAbilityEditor({
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-violet-800/40 bg-violet-950/25 px-3 py-2 text-sm text-violet-100/90">
               <span className="min-w-0 flex-1">
                 <strong>{placement.name}</strong> ·{" "}
-                {slotCompactLabel(valorantUiBySlug, agent.slug, placement.slot)} ·{" "}
+                {placement.slot === "custom"
+                  ? "Custom (no key)"
+                  : slotCompactLabel(
+                      valorantUiBySlug,
+                      agent.slug,
+                      placement.slot,
+                    )}{" "}
+                ·{" "}
                 {placement.shapeKind}
                 <span className="mt-1 block text-xs font-normal text-violet-300/85">
                   {placementProgressLine(placement.shapeKind, placement.points.length)} ·{" "}
@@ -1703,7 +1799,13 @@ export function AgentAbilityEditor({
                     onClick={() => setSelectedId(b.id)}
                   >
                     <span className="text-xs text-violet-400/80">
-                      {slotCompactLabel(valorantUiBySlug, agent.slug, b.slot)}
+                      {b.slot === "custom"
+                        ? "★"
+                        : slotCompactLabel(
+                            valorantUiBySlug,
+                            agent.slug,
+                            b.slot,
+                          )}
                     </span>{" "}
                     {b.name}{" "}
                     <span className="text-violet-500/60">({b.shapeKind})</span>
@@ -1723,8 +1825,9 @@ export function AgentAbilityEditor({
               <div className="mt-3 space-y-3 border-t border-violet-800/35 pt-3">
                 <p className="text-[11px] text-violet-400/75">
                   Edit coordinates in{" "}
-                  <strong className="text-violet-200/90">blueprint units</strong> (0–
-                  {VB}). On strats, the{" "}
+                  <strong className="text-violet-200/90">blueprint units</strong> (most
+                  shapes 0–{BLUEPRINT_CANVAS_SIZE}; ray / line endpoints and curve
+                  control up to {BLUEPRINT_EDITOR_COORD_MAX}). On strats, the{" "}
                   <strong className="text-violet-200/90">{BLUEPRINT_CANVAS_SIZE} bp</strong>{" "}
                   canvas edge maps to{" "}
                   {STRAT_BLUEPRINT_BBOX_TO_MAP_WIDTH_RATIO * 100}% of map view width;

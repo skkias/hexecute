@@ -19,8 +19,15 @@ export interface StratPlacedAgent {
 export interface StratPlacedAbility {
   id: string;
   agentSlug: string;
-  /** Valorant-style ability slots (keyboard row). */
-  slot: "q" | "e" | "c" | "x";
+  /**
+   * Ability key (`q`/`e`/`c`/`x`) or `custom` for coach-defined extras.
+   * When `slot` is `custom`, `abilityBlueprintId` must match the blueprint row id.
+   */
+  slot: "q" | "e" | "c" | "x" | "custom";
+  /**
+   * Required when `slot === "custom"`: identifies which custom blueprint to render.
+   */
+  abilityBlueprintId?: string;
   x: number;
   y: number;
   /**
@@ -32,6 +39,11 @@ export interface StratPlacedAbility {
    * Omitted → 0.
    */
   rotationDeg?: number;
+  /**
+   * For toggleable ray/wall blueprints: `true` = active/up, `false` = inactive/down.
+   * Omitted behaves like `true`.
+   */
+  toggledOn?: boolean;
 }
 
 export interface StratStage {

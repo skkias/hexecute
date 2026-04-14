@@ -251,7 +251,7 @@ export function BlueprintGeometryFields({
                 onChange={(e) =>
                   onChange({
                     ...g,
-                    x1: clampCoord(Number.parseFloat(e.target.value)),
+                    x1: clampCoordExtended(Number.parseFloat(e.target.value)),
                   })
                 }
                 className={fieldCls()}
@@ -266,7 +266,7 @@ export function BlueprintGeometryFields({
                 onChange={(e) =>
                   onChange({
                     ...g,
-                    y1: clampCoord(Number.parseFloat(e.target.value)),
+                    y1: clampCoordExtended(Number.parseFloat(e.target.value)),
                   })
                 }
                 className={fieldCls()}
@@ -286,7 +286,7 @@ export function BlueprintGeometryFields({
                 onChange={(e) =>
                   onChange({
                     ...g,
-                    x2: clampCoord(Number.parseFloat(e.target.value)),
+                    x2: clampCoordExtended(Number.parseFloat(e.target.value)),
                   })
                 }
                 className={fieldCls()}
@@ -301,7 +301,7 @@ export function BlueprintGeometryFields({
                 onChange={(e) =>
                   onChange({
                     ...g,
-                    y2: clampCoord(Number.parseFloat(e.target.value)),
+                    y2: clampCoordExtended(Number.parseFloat(e.target.value)),
                   })
                 }
                 className={fieldCls()}
@@ -334,21 +334,37 @@ export function BlueprintGeometryFields({
                 <option value="curved">Curved</option>
               </select>
             </label>
-            <label className="block text-[11px] text-violet-400/90">
-              Wall state (Viper)
-              <select
-                value={g.wallState ?? "up"}
+            <label className="inline-flex items-center gap-2 text-[11px] text-violet-300/90">
+              <input
+                type="checkbox"
+                className="rounded border-violet-600/60"
+                checked={g.toggleable === true}
                 onChange={(e) =>
                   onChange({
                     ...g,
-                    wallState: e.target.value === "down" ? "down" : "up",
+                    toggleable: e.target.checked,
                   })
                 }
+              />
+              Toggleable wall (on/off in strat stages)
+            </label>
+            <label className="block text-[11px] text-violet-400/90 sm:col-span-2">
+              Line thickness (×)
+              <input
+                type="number"
+                min={0.2}
+                max={8}
+                step={0.05}
+                value={g.strokeWidthMul ?? 1}
+                onChange={(e) => {
+                  const v = Number.parseFloat(e.target.value);
+                  const strokeWidthMul = Number.isFinite(v)
+                    ? Math.min(8, Math.max(0.2, v))
+                    : 1;
+                  onChange({ ...g, strokeWidthMul });
+                }}
                 className={fieldCls()}
-              >
-                <option value="up">Up</option>
-                <option value="down">Down</option>
-              </select>
+              />
             </label>
           </div>
           {g.curve ? (
@@ -367,7 +383,7 @@ export function BlueprintGeometryFields({
                       onChange({
                         ...g,
                         curve: {
-                          cx: clampCoord(Number.parseFloat(e.target.value)),
+                          cx: clampCoordExtended(Number.parseFloat(e.target.value)),
                           cy: g.curve?.cy ?? (g.y1 + g.y2) / 2,
                         },
                       })
@@ -386,7 +402,7 @@ export function BlueprintGeometryFields({
                         ...g,
                         curve: {
                           cx: g.curve?.cx ?? (g.x1 + g.x2) / 2,
-                          cy: clampCoord(Number.parseFloat(e.target.value)),
+                          cy: clampCoordExtended(Number.parseFloat(e.target.value)),
                         },
                       })
                     }

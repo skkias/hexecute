@@ -39,11 +39,33 @@ export function abilitySlotStyle(slot: StratPlacedAbility["slot"]): {
       return { fill: "rgba(251,191,36,0.95)", stroke: "rgba(255,255,255,0.9)" };
     case "x":
       return { fill: "rgba(248,113,113,0.95)", stroke: "rgba(255,255,255,0.9)" };
+    case "custom":
+      return { fill: "rgba(216,180,254,0.95)", stroke: "rgba(255,255,255,0.9)" };
     default:
       return { fill: "rgba(255,255,255,0.85)", stroke: "rgba(0,0,0,0.4)" };
   }
 }
 
+/** Short label on the map pin when no blueprint SVG is available. */
 export function abilitySlotLabel(slot: StratPlacedAbility["slot"]): string {
+  if (slot === "custom") return "★";
   return slot.toUpperCase();
+}
+
+/** Two-letter (or shorter) abbreviation from blueprint name for custom utilities. */
+export function placedAbilityPinLabel(
+  ab: Pick<StratPlacedAbility, "slot" | "abilityBlueprintId">,
+  blueprint: { name: string } | null | undefined,
+): string {
+  if (ab.slot !== "custom") return ab.slot.toUpperCase();
+  const name = blueprint?.name?.trim();
+  if (!name) return "★";
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    const a = words[0]![0];
+    const b = words[1]![0];
+    if (a && b) return (a + b).toUpperCase();
+  }
+  const slice = name.slice(0, 2);
+  return slice.length ? slice.toUpperCase() : "★";
 }

@@ -304,6 +304,7 @@ export function appendPlacedAbilitiesVisionBlockers(
       input.agentsCatalog,
       ab.agentSlug,
       ab.slot,
+      ab.abilityBlueprintId,
     );
     if (!bp || bp.blocksVision !== true) continue;
 

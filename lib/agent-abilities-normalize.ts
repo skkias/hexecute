@@ -14,7 +14,7 @@ import {
   BLUEPRINT_GEOMETRY_LENGTH_MAX,
 } from "@/lib/agent-ability-blueprint-scale";
 
-const SLOTS: AgentAbilitySlot[] = ["q", "e", "c", "x"];
+const SLOTS: AgentAbilitySlot[] = ["q", "e", "c", "x", "custom"];
 
 const SHAPE_KINDS: AgentAbilityShapeKind[] = [
   "point",
@@ -120,19 +120,34 @@ function normalizeGeometry(
     const curve =
       cRaw && typeof cRaw === "object"
         ? {
-            cx: clamp(Number((cRaw as Record<string, unknown>).cx)),
-            cy: clamp(Number((cRaw as Record<string, unknown>).cy)),
+            cx: clampExtendedCoord(
+              Number((cRaw as Record<string, unknown>).cx),
+            ),
+            cy: clampExtendedCoord(
+              Number((cRaw as Record<string, unknown>).cy),
+            ),
           }
         : undefined;
-    const wallState = o.wallState === "down" ? "down" : o.wallState === "up" ? "up" : undefined;
+    const toggleable =
+      o.toggleable === true ||
+      o.wallState === "down" ||
+      o.wallState === "up";
+    const mulRaw = o.strokeWidthMul ?? o.stroke_width_mul;
+    const strokeWidthMul =
+      typeof mulRaw === "number" &&
+      Number.isFinite(mulRaw) &&
+      mulRaw > 0
+        ? Math.min(8, Math.max(0.2, mulRaw))
+        : undefined;
     return {
       kind: "ray",
-      x1: clamp(Number(o.x1)),
-      y1: clamp(Number(o.y1)),
-      x2: clamp(Number(o.x2)),
-      y2: clamp(Number(o.y2)),
+      x1: clampExtendedCoord(Number(o.x1)),
+      y1: clampExtendedCoord(Number(o.y1)),
+      x2: clampExtendedCoord(Number(o.x2)),
+      y2: clampExtendedCoord(Number(o.y2)),
       ...(curve ? { curve } : {}),
-      ...(wallState ? { wallState } : {}),
+      ...(toggleable ? { toggleable: true } : {}),
+      ...(strokeWidthMul !== undefined ? { strokeWidthMul } : {}),
     };
   }
   if (
