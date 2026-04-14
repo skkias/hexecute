@@ -133,6 +133,8 @@ type DragState =
       kind: "abilityRotate";
       id: string;
       pointerId: number;
+      /** `unwrap(pointer) + rotationGrabDeg` so handles need not sit on the heading ray. */
+      rotationGrabDeg: number;
     }
   | {
       kind: "agentVisionConeRotate";
@@ -142,6 +144,20 @@ type DragState =
       handleAlongDist: number;
     }
   | null;
+
+/** Keep pointer angle continuous across atan2's ±π branch while dragging. */
+function unwrapPointerDegAlong(rawDeg: number, prevUnwrapped: number): number {
+  let x = rawDeg;
+  while (x < prevUnwrapped - 180) x += 360;
+  while (x > prevUnwrapped + 180) x -= 360;
+  return x;
+}
+
+function wrapDeg180(deg: number): number {
+  let x = ((deg % 360) + 360) % 360;
+  if (x > 180) x -= 360;
+  return x;
+}
 
 function newItemId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -183,6 +199,7 @@ export function StratStageEditor({
 }) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragSvgRef = useRef<SVGSVGElement | null>(null);
+  const abilityRotatePointerUnwrappedRef = useRef(0);
   const [activeStageIndex, setActiveStageIndex] = useState(0);
   const [placementMode, setPlacementMode] = useState<PlacementMode>(null);
   /** Display-space end point while choosing ability facing (second click). */
@@ -476,6 +493,37 @@ export function StratStageEditor({
     [patchStage],
   );
 
+  const beginAbilityRotateDrag = useCallback(
+    (e: React.PointerEvent, ab: StratPlacedAbility) => {
+      const svg = svgRef.current;
+      if (!svg || !activeStage) return;
+      const raw = svgPointerToLogical(svg, e.clientX, e.clientY);
+      const p = stratStagePinToStoredAttack(
+        vb,
+        editorFrameSide,
+        gameMap,
+        clampPointToViewBox(vb, raw),
+      );
+      const stPos = resolvedPlacedAbilityStoredPosition(ab, activeStage.agents);
+      const initialPointerDeg =
+        (Math.atan2(p.y - stPos.y, p.x - stPos.x) * 180) / Math.PI;
+      abilityRotatePointerUnwrappedRef.current = initialPointerDeg;
+      setDrag({
+        kind: "abilityRotate",
+        id: ab.id,
+        pointerId: e.pointerId,
+        rotationGrabDeg: (ab.rotationDeg ?? 0) - initialPointerDeg,
+      });
+    },
+    [
+      activeStage,
+      editorFrameSide,
+      gameMap,
+      svgPointerToLogical,
+      vb,
+    ],
+  );
+
   const prevIndexRef = useRef(0);
 
   useLayoutEffect(() => {
@@ -619,8 +667,20 @@ export function StratStageEditor({
           activeStageIndex,
           activeStage.abilities.map((a) => {
             if (a.id !== drag.id) return a;
-            const rotationDeg =
-              (Math.atan2(p.y - a.y, p.x - a.x) * 180) / Math.PI;
+            const stPos = resolvedPlacedAbilityStoredPosition(
+              a,
+              activeStage.agents,
+            );
+            const rawPointerDeg =
+              (Math.atan2(p.y - stPos.y, p.x - stPos.x) * 180) / Math.PI;
+            const unwrapped = unwrapPointerDegAlong(
+              rawPointerDeg,
+              abilityRotatePointerUnwrappedRef.current,
+            );
+            abilityRotatePointerUnwrappedRef.current = unwrapped;
+            const rotationDeg = wrapDeg180(
+              unwrapped + drag.rotationGrabDeg,
+            );
             return { ...a, rotationDeg };
           }),
         );
@@ -1208,6 +1268,13 @@ export function StratStageEditor({
           : isRectOD && rectCenterPos
             ? rectCenterPos
             : rotPos;
+        const moveHandleRadius =
+          Math.max(
+            vbWidth * (isRicochetHandles ? 0.0058 : 0.0088),
+            isRicochetHandles ? 3.1 : 4.2,
+          ) * pinS;
+        const rotateHandleHalf = Math.max(vbWidth * 0.0058, 3.1) * pinS;
+        const rotateHandleSize = rotateHandleHalf * 2;
 
         const abilitySvg = bp ? (
           <StratAbilityBlueprintSvg
@@ -1294,12 +1361,7 @@ export function StratStageEditor({
                     <circle
                       cx={pos.x}
                       cy={pos.y}
-                      r={
-                        Math.max(
-                          vbWidth * (isRicochetHandles ? 0.0065 : 0.01),
-                          isRicochetHandles ? 3.5 : 5,
-                        ) * pinS
-                      }
+                      r={moveHandleRadius}
                       fill={isRicochetHandles ? "rgb(34, 197, 94)" : accentColor}
                       stroke={isRicochetHandles ? "#ecfccb" : sel ? "#faf5ff" : "rgb(15, 23, 42)"}
                       strokeWidth={
@@ -1330,65 +1392,28 @@ export function StratStageEditor({
                     />
                   ) : null}
                   {showRotationHandle ? (
-                    isRicochetHandles ? (
-                      <rect
-                        x={
-                          rotationHandlePos.x -
-                          Math.max(vbWidth * 0.0065, 3.25) * pinS
-                        }
-                        y={
-                          rotationHandlePos.y -
-                          Math.max(vbWidth * 0.0065, 3.25) * pinS
-                        }
-                        width={Math.max(vbWidth * 0.013, 6.5) * pinS}
-                        height={Math.max(vbWidth * 0.013, 6.5) * pinS}
-                        rx={Math.max(vbWidth * 0.0016, 1.2) * pinS}
-                        fill="rgb(250, 204, 21)"
-                        stroke="#422006"
-                        strokeWidth={Math.max(vbWidth * 0.0018, 0.9) * pinS}
-                        style={{
-                          cursor: placementMode ? "default" : "grab",
-                          touchAction: "none",
-                        }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          if (placementMode) return;
-                          setSelectedId(ab.id);
-                          focusMapSvg();
-                          setDrag({
-                            kind: "abilityRotate",
-                            id: ab.id,
-                            pointerId: e.pointerId,
-                          });
-                        }}
-                      />
-                    ) : (
-                      <circle
-                        cx={rotationHandlePos.x}
-                        cy={rotationHandlePos.y}
-                        r={Math.max(vbWidth * 0.009, 4.5) * pinS}
-                        fill={accentColor}
-                        stroke={sel ? "#faf5ff" : "rgb(15, 23, 42)"}
-                        strokeWidth={
-                          Math.max(vbWidth * 0.002, 1) * (sel ? 2 : 1) * pinS
-                        }
-                        style={{
-                          cursor: placementMode ? "default" : "grab",
-                          touchAction: "none",
-                        }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          if (placementMode) return;
-                          setSelectedId(ab.id);
-                          focusMapSvg();
-                          setDrag({
-                            kind: "abilityRotate",
-                            id: ab.id,
-                            pointerId: e.pointerId,
-                          });
-                        }}
-                      />
-                    )
+                    <rect
+                      x={rotationHandlePos.x - rotateHandleHalf}
+                      y={rotationHandlePos.y - rotateHandleHalf}
+                      width={rotateHandleSize}
+                      height={rotateHandleSize}
+                      rx={Math.max(vbWidth * 0.00145, 1.05) * pinS}
+                      fill={isRicochetHandles ? "rgb(250, 204, 21)" : accentColor}
+                      stroke={isRicochetHandles ? "#422006" : sel ? "#faf5ff" : "rgb(15, 23, 42)"}
+                      strokeWidth={Math.max(vbWidth * 0.00175, 0.9) * pinS}
+                      transform={`rotate(45 ${rotationHandlePos.x} ${rotationHandlePos.y})`}
+                      style={{
+                        cursor: placementMode ? "default" : "grab",
+                        touchAction: "none",
+                      }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (placementMode) return;
+                        setSelectedId(ab.id);
+                        focusMapSvg();
+                        beginAbilityRotateDrag(e, ab);
+                      }}
+                    />
                   ) : null}
                 </>
               ) : null}
@@ -1466,7 +1491,23 @@ export function StratStageEditor({
   ) : null;
 
   function addStage() {
-    onStagesChange([...stages, createEmptyStratStage(stages.length)]);
+    const prev = stages[stages.length - 1];
+    const next =
+      prev != null
+        ? {
+            ...prev,
+            id: newItemId(),
+            agents: prev.agents.map((a) => ({ ...a })),
+            abilities: prev.abilities.map((a) => ({ ...a })),
+            mapLayerVisibility: prev.mapLayerVisibility
+              ? { ...prev.mapLayerVisibility }
+              : undefined,
+            doorOpenByOverlayId: prev.doorOpenByOverlayId
+              ? { ...prev.doorOpenByOverlayId }
+              : undefined,
+          }
+        : createEmptyStratStage(stages.length);
+    onStagesChange([...stages, next]);
     setActiveStageIndex(stages.length);
   }
 
