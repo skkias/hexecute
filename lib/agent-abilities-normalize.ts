@@ -363,6 +363,19 @@ function normalizePointColorIntensity(raw: unknown): number | undefined {
   return Math.min(1, Math.max(0.15, n));
 }
 
+function normalizePointSymbolStrokeWidthMul(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(4, Math.max(0.35, n));
+}
+
+function normalizePointSymbolInvertFillStroke(
+  raw: unknown,
+): boolean | undefined {
+  if (raw === true) return true;
+  return undefined;
+}
+
 export function normalizeAgentAbilityBlueprint(raw: unknown): AgentAbilityBlueprint | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -394,6 +407,12 @@ export function normalizeAgentAbilityBlueprint(raw: unknown): AgentAbilityBluepr
   );
   const pointColorIntensity = normalizePointColorIntensity(
     o.pointColorIntensity ?? o.point_color_intensity,
+  );
+  const pointSymbolStrokeWidthMul = normalizePointSymbolStrokeWidthMul(
+    o.pointSymbolStrokeWidthMul ?? o.point_symbol_stroke_width_mul,
+  );
+  const pointSymbolInvertFillStroke = normalizePointSymbolInvertFillStroke(
+    o.pointSymbolInvertFillStroke ?? o.point_symbol_invert_fill_stroke,
   );
   const textureId = normalizeAbilityTextureId(o.textureId ?? o.texture_id);
   const textureRadialFromOrigin = normalizeTextureRadialFromOrigin(
@@ -429,6 +448,12 @@ export function normalizeAgentAbilityBlueprint(raw: unknown): AgentAbilityBluepr
   if (pointMarkSymbolId) base.pointMarkSymbolId = pointMarkSymbolId;
   if (pointIconScale !== undefined) base.pointIconScale = pointIconScale;
   if (pointColorIntensity !== undefined) base.pointColorIntensity = pointColorIntensity;
+  if (pointSymbolStrokeWidthMul !== undefined) {
+    base.pointSymbolStrokeWidthMul = pointSymbolStrokeWidthMul;
+  }
+  if (pointSymbolInvertFillStroke === true) {
+    base.pointSymbolInvertFillStroke = true;
+  }
   if (textureId) base.textureId = textureId;
   if (textureRadialFromOrigin === true) {
     base.textureRadialFromOrigin = true;

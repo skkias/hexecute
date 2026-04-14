@@ -6,6 +6,8 @@ import {
   effectivePointColorIntensity,
   effectivePointMarkStyle,
   effectivePointMarkSymbolId,
+  effectivePointSymbolInvertFillStroke,
+  effectivePointSymbolStrokeWidthMul,
 } from "@/lib/point-blueprint-mark";
 import { PointMarkSymbolGraphic } from "@/components/PointBlueprintMarkDraw";
 import type { MapPoint } from "@/lib/map-path";
@@ -230,6 +232,10 @@ export function BlueprintShapeHandles({
                     symbolId={effectivePointMarkSymbolId(blueprint)}
                     stroke={stroke}
                     swMap={vb * 0.004}
+                    strokeWidthMul={effectivePointSymbolStrokeWidthMul(blueprint)}
+                    invertFillStroke={effectivePointSymbolInvertFillStroke(
+                      blueprint,
+                    )}
                   />
                 </g>
               ) : (
@@ -268,7 +274,9 @@ export function BlueprintShapeHandles({
                 cx={geom.x}
                 cy={geom.y}
                 r={hitR}
-                fill="transparent"
+                fill="#fff"
+                fillOpacity={0}
+                style={{ pointerEvents: "all" }}
               />
             </g>
           </g>

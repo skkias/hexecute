@@ -24,6 +24,8 @@ import {
   effectivePointColorIntensity,
   effectivePointMarkStyle,
   effectivePointMarkSymbolId,
+  effectivePointSymbolInvertFillStroke,
+  effectivePointSymbolStrokeWidthMul,
 } from "@/lib/point-blueprint-mark";
 import { PointMarkSymbolGraphic } from "@/components/PointBlueprintMarkDraw";
 
@@ -191,6 +193,8 @@ function PointBlueprintMark({
   pointerEvents,
   markStyle,
   symbolId,
+  symbolStrokeWidthMul = 1,
+  symbolInvertFillStroke = false,
 }: {
   x: number;
   y: number;
@@ -204,6 +208,8 @@ function PointBlueprintMark({
   pointerEvents: "none" | "auto";
   markStyle: PointMarkStyle;
   symbolId?: PointMarkSymbolId;
+  symbolStrokeWidthMul?: number;
+  symbolInvertFillStroke?: boolean;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const scale = Math.min(3, Math.max(0.12, iconScale));
@@ -235,16 +241,35 @@ function PointBlueprintMark({
 
   if (markStyle === "symbol") {
     const sid = symbolId ?? "crosshair";
+    const baseR = BP * 0.018 * scale;
+    const hitR =
+      Math.max(baseR * 1.35, BP * 0.028 * scale) *
+      Math.min(1.2, 0.92 + 0.07 * (symbolStrokeWidthMul ?? 1));
     return (
       <g opacity={op} style={{ pointerEvents }}>
-        <g transform={`translate(${x},${y}) scale(${symScale})`}>
+        <g
+          transform={`translate(${x},${y}) scale(${symScale})`}
+          style={{ pointerEvents: "none" }}
+        >
           <PointMarkSymbolGraphic
             symbolId={sid}
             stroke={accentStroke}
             selected={selected}
             swMap={swMap}
+            strokeWidthMul={symbolStrokeWidthMul}
+            invertFillStroke={symbolInvertFillStroke}
           />
         </g>
+        {pointerEvents === "auto" ? (
+          <circle
+            cx={x}
+            cy={y}
+            r={hitR}
+            fill="#fff"
+            fillOpacity={0}
+            style={{ pointerEvents: "all" }}
+          />
+        ) : null}
         {selected ? (
           <circle
             cx={x}
@@ -398,6 +423,8 @@ export function StratAbilityBlueprintSvg({
       const effectiveIconUrl =
         markStyle === "ability_icon" ? abilityDisplayIconUrl : null;
       const intensity = effectivePointColorIntensity(blueprint);
+      const symStrokeMul = effectivePointSymbolStrokeWidthMul(blueprint);
+      const symInvert = effectivePointSymbolInvertFillStroke(blueprint);
       inner = (
         <PointBlueprintMark
           x={g.x}
@@ -411,6 +438,8 @@ export function StratAbilityBlueprintSvg({
           pointerEvents={pointerEvents}
           markStyle={markStyle}
           symbolId={symbolId}
+          symbolStrokeWidthMul={symStrokeMul}
+          symbolInvertFillStroke={symInvert}
         />
       );
       break;

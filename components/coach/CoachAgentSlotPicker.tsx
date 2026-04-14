@@ -24,6 +24,8 @@ export function CoachAgentSlotPicker({
   agents,
   disabled,
   required,
+  /** Slugs already chosen in other comp slots; those agents cannot be picked here. */
+  excludeSlugs = [],
   onChange,
 }: {
   slotIndex: number;
@@ -31,6 +33,7 @@ export function CoachAgentSlotPicker({
   agents: Agent[];
   disabled?: boolean;
   required?: boolean;
+  excludeSlugs?: string[];
   onChange: (slug: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -40,6 +43,8 @@ export function CoachAgentSlotPicker({
     top: number;
     left: number;
   } | null>(null);
+
+  const excluded = useMemo(() => new Set(excludeSlugs.map((s) => s.trim()).filter(Boolean)), [excludeSlugs]);
 
   const sortedAgents = useMemo(
     () =>
@@ -145,21 +150,33 @@ export function CoachAgentSlotPicker({
           ) : null}
           {sortedAgents.map((a) => {
             const on = a.slug === value;
+            const blockedElsewhere =
+              excluded.has(a.slug) && a.slug !== value.trim();
             return (
               <button
                 key={a.slug}
                 type="button"
                 role="option"
                 aria-selected={on}
-                title={a.name}
+                aria-disabled={blockedElsewhere}
+                disabled={blockedElsewhere}
+                title={
+                  blockedElsewhere
+                    ? `${a.name} — already in another slot`
+                    : a.name
+                }
                 onClick={() => {
                   onChange(a.slug);
                   setOpen(false);
                 }}
-                className={`flex flex-col items-center gap-1 rounded-lg border p-1.5 text-center transition hover:border-violet-500/50 hover:bg-violet-950/40 ${
-                  on
-                    ? "border-cyan-500/60 bg-cyan-950/30 ring-1 ring-cyan-500/35"
-                    : "border-violet-800/45 bg-slate-950/70"
+                className={`flex flex-col items-center gap-1 rounded-lg border p-1.5 text-center transition ${
+                  blockedElsewhere
+                    ? "cursor-not-allowed border-violet-900/30 bg-slate-950/40 opacity-40"
+                    : `hover:border-violet-500/50 hover:bg-violet-950/40 ${
+                        on
+                          ? "border-cyan-500/60 bg-cyan-950/30 ring-1 ring-cyan-500/35"
+                          : "border-violet-800/45 bg-slate-950/70"
+                      }`
                 }`}
               >
                 {a.portrait_url ? (

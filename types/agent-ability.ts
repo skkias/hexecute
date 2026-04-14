@@ -200,6 +200,14 @@ export interface AgentAbilityBlueprint {
    */
   pointColorIntensity?: number;
   /**
+   * Point shapes, symbol mark only: multiplies preset symbol stroke thickness (default `1`).
+   */
+  pointSymbolStrokeWidthMul?: number;
+  /**
+   * Point shapes, symbol mark only: swap fill and outline emphasis on the vector mark.
+   */
+  pointSymbolInvertFillStroke?: boolean;
+  /**
    * When true, this blueprint’s on-map geometry participates in vision-cone LOS
    * (token cones and blueprint vision wedges).
    */

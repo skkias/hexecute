@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -23,6 +22,8 @@ import { POINT_MARK_SYMBOL_IDS } from "@/types/agent-ability";
 import {
   effectivePointMarkStyle,
   effectivePointMarkSymbolId,
+  effectivePointSymbolInvertFillStroke,
+  effectivePointSymbolStrokeWidthMul,
   POINT_MARK_SYMBOL_LABELS,
 } from "@/lib/point-blueprint-mark";
 import { PointMarkSymbolGraphic } from "@/components/PointBlueprintMarkDraw";
@@ -292,6 +293,8 @@ function PointBlueprintEditorPreview({
   vbExtent = VB,
   markStyle,
   symbolId,
+  symbolStrokeWidthMul = 1,
+  symbolInvertFillStroke = false,
 }: {
   x: number;
   y: number;
@@ -303,6 +306,8 @@ function PointBlueprintEditorPreview({
   vbExtent?: number;
   markStyle: PointMarkStyle;
   symbolId?: PointMarkSymbolId;
+  symbolStrokeWidthMul?: number;
+  symbolInvertFillStroke?: boolean;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const sw = vbExtent * 0.004;
@@ -341,6 +346,8 @@ function PointBlueprintEditorPreview({
             symbolId={sid}
             stroke={stroke}
             swMap={sw}
+            strokeWidthMul={symbolStrokeWidthMul}
+            invertFillStroke={symbolInvertFillStroke}
           />
         </g>
       </g>
@@ -433,6 +440,8 @@ function AbilityShapePreview({
           vbExtent={vbExtent}
           markStyle={markStyle}
           symbolId={symbolId}
+          symbolStrokeWidthMul={effectivePointSymbolStrokeWidthMul(b)}
+          symbolInvertFillStroke={effectivePointSymbolInvertFillStroke(b)}
         />
       );
     }
@@ -860,12 +869,6 @@ export function AgentAbilityEditor({
   /** 0 = snap off; otherwise grid units in blueprint space. */
   const [snapStep, setSnapStep] = useState<number>(25);
   const [cursorBp, setCursorBp] = useState<MapPoint | null>(null);
-  /** Match blueprint canvas card height so the right sidebar bottom aligns with the grid. */
-  const blueprintCanvasBlockRef = useRef<HTMLDivElement>(null);
-  const [blueprintCanvasBlockHeightPx, setBlueprintCanvasBlockHeightPx] =
-    useState<number | null>(null);
-  /** Sidebar height sync only when two-column layout (Tailwind `xl`). */
-  const [blueprintSidebarAlignXl, setBlueprintSidebarAlignXl] = useState(false);
 
   const blueprintSvgExtent = useMemo(() => {
     let maxC = BLUEPRINT_CANVAS_SIZE;
@@ -919,26 +922,6 @@ export function AgentAbilityEditor({
     },
     [placement, snapStep],
   );
-
-  useLayoutEffect(() => {
-    const el = blueprintCanvasBlockRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const sync = () => {
-      setBlueprintCanvasBlockHeightPx(el.getBoundingClientRect().height);
-    };
-    sync();
-    const ro = new ResizeObserver(sync);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [blueprintSvgExtent, selectedId, placement]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1280px)");
-    const apply = () => setBlueprintSidebarAlignXl(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
 
   useEffect(() => {
     if (draftSlot === "custom") return;
@@ -1140,6 +1123,8 @@ export function AgentAbilityEditor({
           | "pointMarkSymbolId"
           | "pointIconScale"
           | "pointColorIntensity"
+          | "pointSymbolStrokeWidthMul"
+          | "pointSymbolInvertFillStroke"
           | "textureId"
           | "textureRadialFromOrigin"
           | "blocksVision"
@@ -1180,10 +1165,14 @@ export function AgentAbilityEditor({
               delete n.pointMarkStyle;
               delete n.pointMarkSymbolId;
               delete n.pointIconShow;
+              delete n.pointSymbolStrokeWidthMul;
+              delete n.pointSymbolInvertFillStroke;
             } else if (v === "dot") {
               n.pointMarkStyle = "dot";
               delete n.pointMarkSymbolId;
               delete n.pointIconShow;
+              delete n.pointSymbolStrokeWidthMul;
+              delete n.pointSymbolInvertFillStroke;
             } else if (v === "symbol") {
               n.pointMarkStyle = "symbol";
               delete n.pointIconShow;
@@ -1209,6 +1198,20 @@ export function AgentAbilityEditor({
               delete n.pointColorIntensity;
             } else {
               n.pointColorIntensity = patch.pointColorIntensity;
+            }
+          }
+          if ("pointSymbolStrokeWidthMul" in patch) {
+            if (patch.pointSymbolStrokeWidthMul === undefined) {
+              delete n.pointSymbolStrokeWidthMul;
+            } else {
+              n.pointSymbolStrokeWidthMul = patch.pointSymbolStrokeWidthMul;
+            }
+          }
+          if ("pointSymbolInvertFillStroke" in patch) {
+            if (patch.pointSymbolInvertFillStroke === true) {
+              n.pointSymbolInvertFillStroke = true;
+            } else {
+              delete n.pointSymbolInvertFillStroke;
             }
           }
           if ("textureId" in patch) {
@@ -1454,8 +1457,8 @@ export function AgentAbilityEditor({
         ) : null}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
-        <div className="min-w-0 space-y-3">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-stretch">
+        <div className="flex min-h-0 min-w-0 flex-col space-y-3 xl:h-full">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-violet-800/30 bg-slate-950/55 px-3 py-2 text-xs text-violet-200/90">
             <span className="text-violet-400/90">
               Snap to grid (easier to match in-game proportions by eye)
@@ -1479,10 +1482,7 @@ export function AgentAbilityEditor({
             <strong className="text-violet-200/85">drag the colored dots</strong> to resize and
             move. While placing a new shape, move the pointer to preview before you click.
           </p>
-          <div
-            ref={blueprintCanvasBlockRef}
-            className="overflow-hidden rounded-xl border border-violet-500/25 bg-slate-950/80"
-          >
+          <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-violet-500/25 bg-slate-950/80">
             <div className="mx-auto w-full max-w-[min(100%,78dvh)] p-1.5">
               <svg
                 ref={svgRef}
@@ -1763,21 +1763,7 @@ export function AgentAbilityEditor({
           )}
         </div>
 
-        <div
-          className={`min-h-0 min-w-0 space-y-4 rounded-xl border border-violet-500/20 bg-slate-950/50 p-4 xl:overflow-y-auto xl:overscroll-contain [scrollbar-gutter:stable] ${
-            blueprintSidebarAlignXl && blueprintCanvasBlockHeightPx != null
-              ? ""
-              : "xl:max-h-[76dvh]"
-          }`}
-          style={
-            blueprintSidebarAlignXl && blueprintCanvasBlockHeightPx != null
-              ? {
-                  minHeight: blueprintCanvasBlockHeightPx,
-                  maxHeight: blueprintCanvasBlockHeightPx,
-                }
-              : undefined
-          }
-        >
+        <div className="flex min-h-0 min-w-0 flex-col space-y-4 rounded-xl border border-violet-500/20 bg-slate-950/50 p-4 xl:h-full xl:overflow-y-auto xl:overscroll-contain [scrollbar-gutter:stable]">
           <h3 className="text-sm font-semibold text-white">Define new ability</h3>
           <div className="space-y-2">
             <label className="label" htmlFor="ab-slot">
@@ -2156,6 +2142,52 @@ export function AgentAbilityEditor({
                             );
                           })}
                         </div>
+                        <label className="block text-[10px] text-violet-400/90">
+                          Symbol outline (
+                          {effectivePointSymbolStrokeWidthMul(selected).toFixed(2)}×)
+                          <input
+                            type="range"
+                            min={0.35}
+                            max={4}
+                            step={0.05}
+                            value={effectivePointSymbolStrokeWidthMul(selected)}
+                            onChange={(e) =>
+                              updateSelectedBlueprintMeta({
+                                pointSymbolStrokeWidthMul:
+                                  Number(e.target.value) || 1,
+                              })
+                            }
+                            className="mt-1 w-full accent-cyan-500"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="btn-secondary w-full py-1 text-[11px]"
+                          onClick={() =>
+                            updateSelectedBlueprintMeta({
+                              pointSymbolStrokeWidthMul: undefined,
+                            })
+                          }
+                        >
+                          Reset symbol outline
+                        </button>
+                        <label className="flex cursor-pointer items-center gap-2 text-[11px] text-violet-200/90">
+                          <input
+                            type="checkbox"
+                            className="rounded border-violet-600/60"
+                            checked={effectivePointSymbolInvertFillStroke(
+                              selected,
+                            )}
+                            onChange={(e) =>
+                              updateSelectedBlueprintMeta({
+                                pointSymbolInvertFillStroke: e.target.checked
+                                  ? true
+                                  : undefined,
+                              })
+                            }
+                          />
+                          Invert fill &amp; outline
+                        </label>
                       </div>
                     ) : null}
                     <label className="block text-[10px] text-violet-400/90">

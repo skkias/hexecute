@@ -594,6 +594,9 @@ export function CoachDashboard({
                     agents={initialAgents}
                     disabled={!catalogReady}
                     required={catalogReady}
+                    excludeSlugs={form.agentSlots
+                      .map((s, j) => (j !== i ? s.trim() : ""))
+                      .filter((s): s is string => Boolean(s))}
                     onChange={(slug) => {
                       const next = [...form.agentSlots] as [
                         string,

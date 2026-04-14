@@ -1,7 +1,28 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { rgbaWithAlpha } from "@/lib/ability-textures";
 import type { PointMarkSymbolId } from "@/types/agent-ability";
+
+/**
+ * `pen` = outline strokes; `dim` = fill tint (often with fillOpacity on the element).
+ * When the accent is a single color, invert swaps solid vs soft emphasis.
+ */
+function symbolPaints(
+  stroke: string,
+  selected: boolean,
+  invertFillStroke: boolean,
+): { pen: string; dim: string } {
+  let pen = selected ? "#faf5ff" : stroke;
+  let dim = selected ? "#e9d5ff" : stroke;
+  if (invertFillStroke) {
+    [pen, dim] = [dim, pen];
+  }
+  if (invertFillStroke && !selected && pen === dim) {
+    return { dim: stroke, pen: rgbaWithAlpha(stroke, 0.55) };
+  }
+  return { pen, dim };
+}
 
 /**
  * Vector preset drawn in a centered 24×24 logical space (scale applied by parent).
@@ -11,16 +32,22 @@ export function PointMarkSymbolGraphic({
   stroke,
   selected,
   swMap,
+  strokeWidthMul = 1,
+  invertFillStroke = false,
 }: {
   symbolId: PointMarkSymbolId;
   stroke: string;
   selected?: boolean;
   /** Non-scaling stroke width (strat map / editor). */
   swMap: number;
+  /** Multiplier for symbol outline thickness (default 1). */
+  strokeWidthMul?: number;
+  /** Swap fill vs outline emphasis. */
+  invertFillStroke?: boolean;
 }) {
-  const pen = selected ? "#faf5ff" : stroke;
-  const sw = Math.max(swMap * 0.75, 0.9);
-  const dim = selected ? "#e9d5ff" : stroke;
+  const { pen, dim } = symbolPaints(stroke, !!selected, invertFillStroke);
+  const mul = Math.min(4, Math.max(0.35, strokeWidthMul));
+  const sw = Math.max(swMap * 0.75, 0.9) * mul;
   const ve = "non-scaling-stroke" as const;
   const pe: CSSProperties = { pointerEvents: "none" };
 

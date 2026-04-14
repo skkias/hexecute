@@ -2397,76 +2397,81 @@ export function StratStageEditor({
           </div>
         ) : null}
         {stageSelectorUnderMap}
-        {agentVisionContextMenu ? (
-          <>
-            <button
-              type="button"
-              aria-label="Dismiss menu"
-              className="fixed inset-0 z-45 cursor-default bg-transparent"
-              onPointerDown={() => setAgentVisionContextMenu(null)}
-            />
-            <div
-              role="menu"
-              className="fixed z-50 min-w-42 rounded-lg border border-violet-700/55 bg-slate-950 py-1 shadow-2xl shadow-violet-950/50"
-              style={clampFixedMenuPosition(
-                agentVisionContextMenu.clientX,
-                agentVisionContextMenu.clientY,
-                176,
-                132,
-              )}
-            >
-              {(
-                [
-                  { key: "off" as const, label: "Vision cone: Off" },
-                  { key: "wide" as const, label: "Vision cone: Wide" },
-                  { key: "thin" as const, label: "Vision cone: Thin" },
-                ] as const
-              ).map(({ key, label }) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="menuitem"
-                  className="block w-full px-3 py-2 text-left text-xs text-violet-100 hover:bg-violet-900/45"
-                  onClick={() => {
-                    const id = agentVisionContextMenu.agentId;
-                    if (key === "off") {
-                      setAgents(
-                        activeStageIndex,
-                        activeStage.agents.map((ag) => {
-                          if (ag.id !== id) return ag;
-                          const {
-                            visionConeWidth: _vw,
-                            visionConeRotationDeg: _vr,
-                            ...rest
-                          } = ag;
-                          return rest;
-                        }),
-                      );
-                    } else {
-                      setAgents(
-                        activeStageIndex,
-                        activeStage.agents.map((ag) =>
-                          ag.id === id
-                            ? {
-                                ...ag,
-                                visionConeWidth: key,
-                                visionConeRotationDeg:
-                                  ag.visionConeRotationDeg ?? 0,
-                              }
-                            : ag,
-                        ),
-                      );
-                    }
-                    setAgentVisionContextMenu(null);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : null}
       </div>
+    ) : null;
+
+  const visionConeContextMenuPortal =
+    agentVisionContextMenu && typeof document !== "undefined" ? (
+      createPortal(
+        <>
+          <button
+            type="button"
+            aria-label="Dismiss menu"
+            className="fixed inset-0 z-240 cursor-default bg-transparent"
+            onPointerDown={() => setAgentVisionContextMenu(null)}
+          />
+          <div
+            role="menu"
+            className="fixed z-250 min-w-42 rounded-lg border border-violet-700/55 bg-slate-950 py-1 shadow-2xl shadow-violet-950/50"
+            style={clampFixedMenuPosition(
+              agentVisionContextMenu.clientX + 4,
+              agentVisionContextMenu.clientY + 4,
+              176,
+              132,
+            )}
+          >
+            {(
+              [
+                { key: "off" as const, label: "Vision cone: Off" },
+                { key: "wide" as const, label: "Vision cone: Wide" },
+                { key: "thin" as const, label: "Vision cone: Thin" },
+              ] as const
+            ).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                role="menuitem"
+                className="block w-full px-3 py-2 text-left text-xs text-violet-100 hover:bg-violet-900/45"
+                onClick={() => {
+                  const id = agentVisionContextMenu.agentId;
+                  if (key === "off") {
+                    setAgents(
+                      activeStageIndex,
+                      activeStage.agents.map((ag) => {
+                        if (ag.id !== id) return ag;
+                        const {
+                          visionConeWidth: _vw,
+                          visionConeRotationDeg: _vr,
+                          ...rest
+                        } = ag;
+                        return rest;
+                      }),
+                    );
+                  } else {
+                    setAgents(
+                      activeStageIndex,
+                      activeStage.agents.map((ag) =>
+                        ag.id === id
+                          ? {
+                              ...ag,
+                              visionConeWidth: key,
+                              visionConeRotationDeg:
+                                ag.visionConeRotationDeg ?? 0,
+                            }
+                          : ag,
+                      ),
+                    );
+                  }
+                  setAgentVisionContextMenu(null);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
+      )
     ) : null;
 
   return (
@@ -2475,6 +2480,7 @@ export function StratStageEditor({
         ? createPortal(controlsPanel, controlsMountEl)
         : null}
       {mapMountEl && mapPanel ? createPortal(mapPanel, mapMountEl) : null}
+      {visionConeContextMenuPortal}
     </>
   );
 }

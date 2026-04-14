@@ -43,6 +43,21 @@ export function effectivePointMarkSymbolId(
   return "crosshair";
 }
 
+/** Symbol preset marks: stroke thickness multiplier (default 1). */
+export function effectivePointSymbolStrokeWidthMul(
+  b: Pick<AgentAbilityBlueprint, "pointSymbolStrokeWidthMul">,
+): number {
+  const n = b.pointSymbolStrokeWidthMul;
+  if (typeof n !== "number" || !Number.isFinite(n)) return 1;
+  return Math.min(4, Math.max(0.35, n));
+}
+
+export function effectivePointSymbolInvertFillStroke(
+  b: Pick<AgentAbilityBlueprint, "pointSymbolInvertFillStroke">,
+): boolean {
+  return b.pointSymbolInvertFillStroke === true;
+}
+
 export function normalizePointMarkStyle(raw: unknown): PointMarkStyle | undefined {
   if (raw === "ability_icon" || raw === "dot" || raw === "symbol") return raw;
   return undefined;
