@@ -450,18 +450,17 @@ export function CoachDashboard({
       )}
 
       <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-violet-500/20 bg-slate-950/45 p-4 shadow-lg shadow-violet-950/15 backdrop-blur-sm sm:p-6">
-        <h2 className="shrink-0 text-lg font-semibold text-white">
-          {editingId ? "Edit strat" : "New strat"}
-        </h2>
         {!catalogReady && !catalogError ? (
-          <p className="mt-4 shrink-0 text-sm text-amber-200/80">
+          <p className="shrink-0 text-sm text-amber-200/80">
             Add agents and maps in Supabase (see migration). Until the catalog has
             rows, you cannot save strats with the new picker.
           </p>
         ) : null}
         <form
           onSubmit={(e) => void handleSubmit(e)}
-          className="mt-6 flex min-h-0 min-w-0 flex-1 flex-col gap-6"
+          className={`flex min-h-0 min-w-0 flex-1 flex-col gap-6 ${
+            !catalogReady && !catalogError ? "mt-4" : ""
+          }`}
         >
           <div
             ref={splitContainerRef}
@@ -549,8 +548,8 @@ export function CoachDashboard({
                 .
               </p>
             </div>
-            <div className="grid min-w-0 grid-cols-1 gap-y-5 sm:col-span-2 sm:grid-cols-2 sm:gap-x-8 sm:gap-y-0 md:gap-x-10 lg:gap-x-14">
-              <div className="min-w-0 sm:pr-3 md:pr-4">
+            <div className="grid min-w-0 grid-cols-1 gap-y-5 sm:col-span-2 sm:grid-cols-2 sm:gap-y-0">
+              <div className="min-w-0 sm:pr-2">
                 <div className="label" id="strat-side-label">
                   Side
                 </div>
@@ -564,7 +563,7 @@ export function CoachDashboard({
                   </div>
                 </div>
               </div>
-              <div className="min-w-0 sm:pl-2 md:pl-3">
+              <div className="min-w-0 sm:pl-2">
                 <div className="label" id="strat-difficulty-label">
                   Difficulty
                 </div>
