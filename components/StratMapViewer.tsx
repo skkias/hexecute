@@ -659,7 +659,7 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
       }
     >
       {showLayerToggles ? (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setLayersModalOpen(true)}
@@ -667,9 +667,6 @@ export const StratMapViewer = forwardRef<SVGSVGElement, StratMapViewerProps>(
           >
             Map filters
           </button>
-          <p className="text-[11px] text-violet-400/70">
-            Layer controls open in a modal
-          </p>
         </div>
       ) : null}
 

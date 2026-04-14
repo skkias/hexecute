@@ -89,6 +89,32 @@ body {
   display: none;
 }
 
+@layer base {
+  /* Native controls: match hover affordance with pointer (overridable e.g. cursor-grab). */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  input[type="submit"]:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="reset"]:not(:disabled) {
+    cursor: pointer;
+  }
+  input[type="submit"]:disabled,
+  input[type="button"]:disabled,
+  input[type="reset"]:disabled {
+    cursor: not-allowed;
+  }
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}
+
 @layer components {
   .input-field {
     @apply w-full rounded-lg border border-violet-800/50 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder:text-violet-300/35;
@@ -100,11 +126,11 @@ body {
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-500 hover:shadow-violet-500/25 disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-500 hover:shadow-violet-500/25 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-violet-800/50 bg-slate-950/50 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-violet-600/40 hover:bg-violet-950/30 disabled:opacity-50;
+    @apply inline-flex cursor-pointer items-center justify-center rounded-lg border border-violet-800/50 bg-slate-950/50 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-violet-600/40 hover:bg-violet-950/30 disabled:cursor-not-allowed disabled:opacity-50;
   }
 }
 

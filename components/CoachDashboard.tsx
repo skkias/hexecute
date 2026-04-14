@@ -30,6 +30,8 @@ import {
   resolveMapIdForStrat,
   slotsFromStratAgents,
 } from "@/lib/coach-strat-form";
+import { DifficultyPicker } from "@/components/coach/DifficultyPicker";
+import { StratSideToggle } from "@/components/coach/StratSideToggle";
 
 const StratStageEditor = dynamic(
   () => import("@/components/StratStageEditor").then((m) => m.StratStageEditor),
@@ -170,7 +172,8 @@ export function CoachDashboard({
   }, []);
 
   const splitContainerRef = useRef<HTMLDivElement>(null);
-  const [splitPct, setSplitPct] = useState(50);
+  /** Left column (Details / Map tabs): default ~¼ width on large screens; drag handle adjusts. */
+  const [splitPct, setSplitPct] = useState(25);
   const [coachFormTab, setCoachFormTab] = useState<"details" | "stages">(
     "details",
   );
@@ -193,7 +196,7 @@ export function CoachDashboard({
         if (!drag || !box?.width) return;
         const dx = ev.clientX - drag.startX;
         const dPct = (dx / box.width) * 100;
-        const next = Math.max(28, Math.min(72, drag.startPct + dPct));
+        const next = Math.max(20, Math.min(80, drag.startPct + dPct));
         setSplitPct(next);
       };
       const onUp = () => {
@@ -546,39 +549,25 @@ export function CoachDashboard({
               </p>
             </div>
             <div>
-              <label className="label" htmlFor="side">
+              <div className="label" id="strat-side-label">
                 Side
-              </label>
-              <select
-                id="side"
+              </div>
+              <StratSideToggle
                 value={form.side}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    side: e.target.value as StratSide,
-                  }))
-                }
-                className="input-field mt-1"
-              >
-                <option value="atk">Attack</option>
-                <option value="def">Defense</option>
-              </select>
+                labelledBy="strat-side-label"
+                onChange={(side) => setForm((f) => ({ ...f, side }))}
+              />
             </div>
             <div>
-              <label className="label" htmlFor="difficulty">
-                Difficulty (1–3)
-              </label>
-              <input
-                id="difficulty"
-                type="number"
-                min={1}
-                max={3}
+              <div className="label" id="strat-difficulty-label">
+                Difficulty
+              </div>
+              <DifficultyPicker
                 value={form.difficulty}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, difficulty: e.target.value }))
+                labelledBy="strat-difficulty-label"
+                onChange={(n) =>
+                  setForm((f) => ({ ...f, difficulty: String(n) }))
                 }
-                className="input-field mt-1"
-                required
               />
             </div>
             <div className="sm:col-span-2">

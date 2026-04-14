@@ -1788,49 +1788,46 @@ export function StratStageEditor({
 
   const stageSelectorUnderMap = (
     <div className="mt-2 shrink-0 rounded-lg border border-violet-800/40 bg-slate-950/50 px-3 py-2.5">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1">
-          <span className="label">Stages</span>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {stages.map((st, idx) => (
-              <div key={st.id} className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          {stages.map((st, idx) => (
+            <div key={st.id} className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveStageIndex(idx)}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                  idx === activeStageIndex
+                    ? "border-violet-500/70 bg-violet-950/50 text-white"
+                    : "border-violet-800/40 bg-slate-950/50 text-violet-200/80 hover:border-violet-600/50"
+                }`}
+              >
+                {st.title || `Stage ${idx + 1}`}
+              </button>
+              {stages.length > 1 ? (
                 <button
                   type="button"
-                  onClick={() => setActiveStageIndex(idx)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                    idx === activeStageIndex
-                      ? "border-violet-500/70 bg-violet-950/50 text-white"
-                      : "border-violet-800/40 bg-slate-950/50 text-violet-200/80 hover:border-violet-600/50"
-                  }`}
+                  title="Remove stage"
+                  onClick={() => removeStage(idx)}
+                  className="rounded p-1.5 text-violet-400/60 hover:bg-fuchsia-950/40 hover:text-fuchsia-200"
                 >
-                  {st.title || `Stage ${idx + 1}`}
+                  <Trash2 className="h-4 w-4" />
                 </button>
-                {stages.length > 1 ? (
-                  <button
-                    type="button"
-                    title="Remove stage"
-                    onClick={() => removeStage(idx)}
-                    className="rounded p-1 text-violet-400/60 hover:bg-fuchsia-950/40 hover:text-fuchsia-200"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                ) : null}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={addStage}
-              className="btn-secondary inline-flex items-center gap-1 py-1.5 text-xs"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Stage
-            </button>
-          </div>
-        </div>
-        <div className="flex gap-1">
+              ) : null}
+            </div>
+          ))}
           <button
             type="button"
-            className="btn-secondary p-2"
+            onClick={addStage}
+            className="btn-secondary inline-flex items-center gap-1 py-2 text-xs"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Stage
+          </button>
+        </div>
+        <div className="flex shrink-0 items-stretch gap-1">
+          <button
+            type="button"
+            className="btn-secondary inline-flex min-h-10 items-center justify-center px-2.5"
             disabled={activeStageIndex <= 0}
             onClick={() => setActiveStageIndex((i) => Math.max(0, i - 1))}
             title="Previous stage"
@@ -1839,7 +1836,7 @@ export function StratStageEditor({
           </button>
           <button
             type="button"
-            className="btn-secondary p-2"
+            className="btn-secondary inline-flex min-h-10 items-center justify-center px-2.5"
             disabled={activeStageIndex >= stages.length - 1}
             onClick={() =>
               setActiveStageIndex((i) => Math.min(stages.length - 1, i + 1))
@@ -2049,7 +2046,7 @@ export function StratStageEditor({
     activeStage ? (
       <div className="flex min-h-[min(56dvh,720px)] w-full min-w-0 flex-1 flex-col lg:min-h-0 lg:flex-1">
         <div className="relative z-20 shrink-0 border-b border-violet-800/40 bg-slate-950/95 px-2 py-2">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex flex-wrap items-stretch justify-between gap-3">
             {roster.length === 0 ? (
               <p className="text-xs text-amber-200/85">
                 Add agents in the Details tab comp to use the portrait tray above the
@@ -2233,21 +2230,18 @@ export function StratStageEditor({
                 })}
               </div>
             )}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 items-stretch gap-2">
               <button
                 type="button"
                 onClick={() => setMapLayersModalOpen(true)}
-                className="rounded-md border border-violet-700/55 bg-slate-950/80 px-3 py-1.5 text-xs font-medium text-violet-100/90 hover:border-violet-500/60 hover:bg-violet-950/45"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-violet-700/55 bg-slate-950/80 px-3 text-xs font-medium text-violet-100/90 hover:border-violet-500/60 hover:bg-violet-950/45"
               >
                 Map filters
               </button>
-              <p className="text-xs text-violet-400/80">
-                Layer controls open in a modal
-              </p>
               <button
                 type="button"
                 onClick={() => setMapResetZoomSignal((n) => n + 1)}
-                className="rounded-md border border-violet-700/50 bg-slate-950/80 px-2 py-1 text-xs font-medium text-violet-200 hover:border-violet-500/50 hover:bg-violet-950/50"
+                className="inline-flex min-h-10 items-center justify-center rounded-md border border-violet-700/50 bg-slate-950/80 px-3 text-xs font-medium text-violet-200 hover:border-violet-500/50 hover:bg-violet-950/50"
               >
                 Reset zoom
               </button>
